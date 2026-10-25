@@ -1,0 +1,16 @@
+{
+  "monitors": [
+    {
+      "kind": "http",
+      "name": "local-health",
+      "target": "http://127.0.0.1:8080/health",
+      "timeout": 10,
+      "interval": 60,
+      "expected_status": 200,
+      "method": "GET",
+      "allow_private": true,
+      "retries": 3,
+      "retry_backoff": 0.2
+    }
+  ]
+}

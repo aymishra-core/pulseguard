@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pulseguard"
+version = "0.1.0"
+description = "Self-hosted uptime, TLS-certificate-expiry and heartbeat monitor."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "PulseGuard contributors" }]
+dependencies = [
+    "requests==2.34.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy==2.4.0",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.2",
+]
+
+[project.scripts]
+pulseguard = "pulseguard.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pulseguard = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --cov=pulseguard --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+source = ["pulseguard"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["pulseguard"]
+mypy_path = "src"
+warn_unused_ignores = true
+show_error_codes = true
