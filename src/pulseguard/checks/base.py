@@ -8,6 +8,7 @@ validating property.
 
 from __future__ import annotations
 
+import ipaddress
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Mapping
 from typing import Any, ClassVar, cast
@@ -171,3 +172,76 @@ def _as_float(value: object, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigValidationError(f"{field} must be a number")
     return float(value)
+
+
+def reject_unknown(spec: Mapping[str, Any], allowed: frozenset[str]) -> None:
+    """Reject config keys this check does not understand."""
+    unknown = sorted(set(spec) - allowed)
+    if unknown:
+        raise ConfigValidationError(f"unknown fields: {', '.join(unknown)}")
+
+
+def optional_value(spec: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """Return ``spec[key]`` when present, otherwise ``default``."""
+    if key not in spec:
+        return default
+    return spec[key]
+
+
+def require_int(value: object, field: str) -> int:
+    """Return an int. Booleans are rejected because they are ints."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigValidationError(f"{field} must be an integer")
+    return value
+
+
+def require_name_target(spec: Mapping[str, Any]) -> tuple[str, str]:
+    """Return the name and target strings from a monitor object."""
+    try:
+        name = spec["name"]
+        target = spec["target"]
+    except KeyError as exc:
+        missing = exc.args[0]
+        raise ConfigValidationError(f"missing {missing}") from exc
+    if not isinstance(name, str) or not isinstance(target, str):
+        raise ConfigValidationError("name and target must be strings")
+    return name, target
+
+
+def prepare_spec(spec: Mapping[str, Any], *, kind: str, allowed: frozenset[str]) -> None:
+    """Reject unknown keys and a mismatched ``kind``."""
+    reject_unknown(spec, allowed)
+    got = spec.get("kind", kind)
+    if got != kind:
+        raise ConfigValidationError(f"kind must be {kind!r}")
+
+
+_LOCAL_NAMES = frozenset({"localhost", "localhost.localdomain"})
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
+
+def is_disallowed_literal_host(host: str) -> bool:
+    """Return True for localhost names and literal non-public IP addresses.
+
+    Non-IP hostnames other than localhost return False. They are not resolved.
+    """
+    cleaned = host.lower().rstrip(".")
+    if cleaned in _LOCAL_NAMES:
+        return True
+    try:
+        parsed: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(cleaned)
+    except ValueError:
+        return False
+    mapped = getattr(parsed, "ipv4_mapped", None)
+    if isinstance(mapped, ipaddress.IPv4Address):
+        parsed = mapped
+    if (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    ):
+        return True
+    return isinstance(parsed, ipaddress.IPv4Address) and parsed in _CGNAT

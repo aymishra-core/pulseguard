@@ -11,6 +11,50 @@
       "allow_private": true,
       "retries": 3,
       "retry_backoff": 0.2
+    },
+    {
+      "kind": "keyword",
+      "name": "local-keyword",
+      "target": "http://127.0.0.1:8080/health",
+      "keyword": "ok",
+      "interval": 60
+    },
+    {
+      "kind": "defacement",
+      "name": "local-page",
+      "target": "http://127.0.0.1:8080/health",
+      "keyword": "ok",
+      "expected_sha256": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+      "alert_after": 3,
+      "interval": 60
+    },
+    {
+      "kind": "tcp",
+      "name": "local-port",
+      "target": "127.0.0.1",
+      "port": 9,
+      "interval": 60
+    },
+    {
+      "kind": "dns",
+      "name": "local-name",
+      "target": "localhost",
+      "expected": ["127.0.0.1"],
+      "interval": 60
+    },
+    {
+      "kind": "tls",
+      "name": "local-cert",
+      "target": "127.0.0.1",
+      "port": 443,
+      "interval": 86400
+    },
+    {
+      "kind": "heartbeat",
+      "name": "nightly-job",
+      "target": "example-heartbeat-token",
+      "grace_seconds": 120,
+      "interval": 60
     }
   ]
 }

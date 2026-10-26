@@ -47,28 +47,6 @@ def test_retry_raises_the_last_error(caplog: pytest.LogCaptureFixture) -> None:
     assert all("down" not in record.message for record in caplog.records)
 
 
-def test_retry_sleeps_for_a_positive_backoff() -> None:
-    """A non-zero backoff sleeps between attempts."""
-    calls = {"n": 0}
-
-    @retry(attempts=2, backoff_seconds=0.01, retry_on=(CheckError,))
-    def flaky() -> str:
-        """Fail once, then succeed."""
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise CheckError("once")
-        return "ok"
-
-    assert flaky() == "ok"
-    assert calls["n"] == 2
-
-
-def test_retry_requires_an_exception_type() -> None:
-    """An empty ``retry_on`` tuple is rejected."""
-    with pytest.raises(ValueError, match="retry_on"):
-        retry(retry_on=())
-
-
 def test_retry_ignores_unlisted_errors() -> None:
     """Errors outside ``retry_on`` propagate on the first attempt."""
     calls = {"n": 0}
@@ -96,6 +74,34 @@ def test_retry_rejects_bad_configuration(attempts: object, backoff: object) -> N
         def _unused() -> None:
             """Not called."""
             return None
+
+
+def test_retry_requires_an_exception_type() -> None:
+    """An empty retry list is rejected when the decorator is applied."""
+    with pytest.raises(ValueError, match="retry_on"):
+
+        @retry(retry_on=())
+        def _unused() -> None:
+            """Not called."""
+            return None
+
+
+def test_retry_sleeps_between_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A positive backoff waits before the next attempt."""
+    delays: list[float] = []
+    monkeypatch.setattr(time, "sleep", delays.append)
+    calls = {"n": 0}
+
+    @retry(attempts=2, backoff_seconds=0.01, retry_on=(CheckError,))
+    def flaky() -> str:
+        """Fail once, then succeed."""
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise CheckError("again")
+        return "ok"
+
+    assert flaky() == "ok"
+    assert delays == [0.01]
 
 
 def test_timed_records_elapsed_on_the_instance() -> None:

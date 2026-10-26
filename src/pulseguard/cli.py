@@ -1,4 +1,4 @@
-"""Command line. Phase 1 runs one or more HTTP checks and prints JSON."""
+"""Command line. ``check`` runs configured monitors once and prints JSON."""
 
 from __future__ import annotations
 
@@ -39,11 +39,11 @@ def _parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
         prog="pulseguard",
-        description="Run a configured HTTP check and print JSON.",
+        description="Run configured checks once and print JSON.",
     )
     parser.add_argument("--version", action="version", version=f"pulseguard {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
-    check = sub.add_parser("check", help="run HTTP checks once and print JSON")
+    check = sub.add_parser("check", help="run configured checks once and print JSON")
     check.add_argument("--name", default="adhoc", help="monitor name used with --url")
     check.add_argument("--url", help="http or https URL to probe")
     check.add_argument("--config", type=Path, help="JSON file with a monitors list")
@@ -97,7 +97,7 @@ def _reject_url_only_flags(args: argparse.Namespace) -> None:
 
 
 def load_monitor_file(path: Path) -> list[BaseCheck]:
-    """Load HTTP monitors from a JSON file and build them through the registry."""
+    """Load monitors from a JSON file and build them through the registry."""
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:

@@ -250,7 +250,7 @@ def test_build_check_reads_http_config() -> None:
     assert check.method == "HEAD"
     assert check.expected_status == 204
     with pytest.raises(ConfigValidationError, match="unknown check kind"):
-        build_check({"kind": "tcp", "name": "x", "target": "127.0.0.1:9"})
+        build_check({"kind": "icmp", "name": "x", "target": "127.0.0.1"})
     with pytest.raises(ConfigValidationError, match="unknown fields"):
         build_check({"kind": "http", "name": "web", "target": "http://127.0.0.1/", "nope": 1})
     with pytest.raises(ConfigValidationError, match="name and target"):

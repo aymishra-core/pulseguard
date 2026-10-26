@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import time
 from collections.abc import Mapping
 from typing import Any, ClassVar
@@ -11,19 +10,29 @@ from urllib.parse import urlparse
 import requests
 
 from pulseguard import __version__
-from pulseguard.checks.base import BaseCheck
+from pulseguard.checks.base import (
+    BaseCheck,
+    is_disallowed_literal_host,
+    optional_value,
+    prepare_spec,
+    require_int,
+    require_name_target,
+)
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.core.decorators import log_call, retry, timed
-from pulseguard.exceptions import CheckError, CheckTimeoutError, ConfigValidationError
+from pulseguard.exceptions import (
+    CheckError,
+    CheckTimeoutError,
+    ConfigValidationError,
+    ContentMismatchError,
+)
 
 MAX_URL_LENGTH = 2048
 MAX_RETRIES = 5
 MAX_BACKOFF_SECONDS = 30.0
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _ALLOWED_METHODS = frozenset({"GET", "HEAD"})
-_LOCAL_NAMES = frozenset({"localhost", "localhost.localdomain"})
-_CGNAT = ipaddress.ip_network("100.64.0.0/10")
-_CONFIG_FIELDS = frozenset(
+HTTP_CONFIG_FIELDS = frozenset(
     {
         "kind",
         "name",
@@ -116,8 +125,34 @@ class HttpCheck(BaseCheck):
     def _execute(self, clock: _Clock) -> CheckResult:
         """Perform one request. Raises ``CheckError`` on transport failure."""
         attempt_started = clock.elapsed_ms()
+        response = self._open_response()
         try:
-            response = requests.request(
+            status = response.status_code
+            body = b""
+            if status == self.expected_status:
+                try:
+                    body = self._body(response)
+                except ContentMismatchError as exc:
+                    return self._outcome(
+                        ok=False,
+                        status=status,
+                        latency_ms=_latency_since(clock, attempt_started),
+                        message=str(exc),
+                        severity=Severity.CRITICAL,
+                    )
+                except requests.Timeout as exc:
+                    raise CheckTimeoutError(f"timed out after {self.timeout:g} seconds") from exc
+                except requests.RequestException as exc:
+                    raise CheckError(f"request failed: {type(exc).__name__}") from exc
+            latency_ms = _latency_since(clock, attempt_started)
+        finally:
+            response.close()
+        return self._interpret(status, body, latency_ms)
+
+    def _open_response(self) -> requests.Response:
+        """Open the HTTP response. The caller closes it."""
+        try:
+            return requests.request(
                 self.method,
                 self.target,
                 timeout=self.timeout,
@@ -129,12 +164,15 @@ class HttpCheck(BaseCheck):
             raise CheckTimeoutError(f"timed out after {self.timeout:g} seconds") from exc
         except requests.RequestException as exc:
             raise CheckError(f"request failed: {type(exc).__name__}") from exc
-        try:
-            status = response.status_code
-        finally:
-            response.close()
-        latency_ms = clock.elapsed_ms() - attempt_started
-        assert latency_ms >= 0, "request latency cannot be negative"
+
+    def _body(self, response: requests.Response) -> bytes:
+        """Return the entity a subclass wants to inspect. Status checks skip it."""
+        del response
+        return b""
+
+    def _interpret(self, status: int, body: bytes, latency_ms: float) -> CheckResult:
+        """Turn a finished response into a result. Subclasses inspect ``body``."""
+        del body
         ok = status == self.expected_status
         if ok:
             message = f"HTTP {status}"
@@ -142,6 +180,24 @@ class HttpCheck(BaseCheck):
         else:
             message = f"expected HTTP {self.expected_status} but got {status}"
             severity = Severity.CRITICAL
+        return self._outcome(
+            ok=ok,
+            status=status,
+            latency_ms=latency_ms,
+            message=message,
+            severity=severity,
+        )
+
+    def _outcome(
+        self,
+        *,
+        ok: bool,
+        status: int | None,
+        latency_ms: float,
+        message: str,
+        severity: Severity,
+    ) -> CheckResult:
+        """Build a result for this monitor."""
         return CheckResult(
             monitor=self.name,
             kind=self.kind,
@@ -156,27 +212,18 @@ class HttpCheck(BaseCheck):
     @classmethod
     def from_config(cls, spec: Mapping[str, Any]) -> HttpCheck:
         """Build an ``HttpCheck`` from a JSON object."""
-        _reject_unknown(spec)
-        kind = spec.get("kind", cls.kind)
-        if kind != cls.kind:
-            raise ConfigValidationError(f"HttpCheck requires kind {cls.kind!r}")
-        try:
-            name = spec["name"]
-            target = spec["target"]
-        except KeyError as exc:
-            raise ConfigValidationError(f"missing {exc.args[0]}") from exc
-        if not isinstance(name, str) or not isinstance(target, str):
-            raise ConfigValidationError("name and target must be strings")
+        prepare_spec(spec, kind=cls.kind, allowed=HTTP_CONFIG_FIELDS)
+        name, target = require_name_target(spec)
         return cls(
             name,
             target,
-            timeout=_optional(spec, "timeout"),
-            interval=_optional(spec, "interval"),
-            expected_status=_optional(spec, "expected_status", 200),
-            method=_optional(spec, "method", "GET"),
-            allow_private=_optional(spec, "allow_private", True),
-            retries=_optional(spec, "retries", 3),
-            retry_backoff=_optional(spec, "retry_backoff", 0.2),
+            timeout=optional_value(spec, "timeout"),
+            interval=optional_value(spec, "interval"),
+            expected_status=optional_value(spec, "expected_status", 200),
+            method=optional_value(spec, "method", "GET"),
+            allow_private=optional_value(spec, "allow_private", True),
+            retries=optional_value(spec, "retries", 3),
+            retry_backoff=optional_value(spec, "retry_backoff", 0.2),
         )
 
 
@@ -193,31 +240,11 @@ class _Clock:
         return (self._time() - self._started) * 1000.0
 
 
-def is_disallowed_literal_host(host: str) -> bool:
-    """Return True for localhost names and literal non-public IP addresses.
-
-    Non-IP hostnames other than localhost return False. They are not resolved.
-    """
-    cleaned = host.lower().rstrip(".")
-    if cleaned in _LOCAL_NAMES:
-        return True
-    try:
-        parsed: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(cleaned)
-    except ValueError:
-        return False
-    mapped = getattr(parsed, "ipv4_mapped", None)
-    if isinstance(mapped, ipaddress.IPv4Address):
-        parsed = mapped
-    if (
-        parsed.is_private
-        or parsed.is_loopback
-        or parsed.is_link_local
-        or parsed.is_reserved
-        or parsed.is_multicast
-        or parsed.is_unspecified
-    ):
-        return True
-    return isinstance(parsed, ipaddress.IPv4Address) and parsed in _CGNAT
+def _latency_since(clock: _Clock, started_ms: float) -> float:
+    """Return milliseconds since ``started_ms`` on ``clock``."""
+    latency_ms = clock.elapsed_ms() - started_ms
+    assert latency_ms >= 0, "request latency cannot be negative"
+    return latency_ms
 
 
 def _validate_http_target(target: str, *, allow_private: bool) -> None:
@@ -247,7 +274,7 @@ def _validate_http_target(target: str, *, allow_private: bool) -> None:
 
 def _require_status(status: object) -> int:
     """Return an HTTP status code in the range this client can compare."""
-    number = _require_int(status, "expected_status")
+    number = require_int(status, "expected_status")
     if number < 100 or number > 599:
         raise ConfigValidationError("expected_status must be from 100 to 599")
     return number
@@ -265,7 +292,7 @@ def _require_method(method: object) -> str:
 
 def _require_retries(retries: object) -> int:
     """Return a retry count inside the accepted bound."""
-    number = _require_int(retries, "retries")
+    number = require_int(retries, "retries")
     if number < 1 or number > MAX_RETRIES:
         raise ConfigValidationError(f"retries must be from 1 to {MAX_RETRIES}")
     return number
@@ -281,24 +308,3 @@ def _require_backoff(backoff: object) -> float:
             f"retry_backoff must be from 0 to {MAX_BACKOFF_SECONDS:g} seconds"
         )
     return number
-
-
-def _require_int(value: object, field: str) -> int:
-    """Return an int. Booleans are rejected because they are ints."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigValidationError(f"{field} must be an integer")
-    return value
-
-
-def _reject_unknown(spec: Mapping[str, Any]) -> None:
-    """Reject config keys this check does not understand."""
-    unknown = sorted(set(spec) - _CONFIG_FIELDS)
-    if unknown:
-        raise ConfigValidationError(f"unknown fields: {', '.join(unknown)}")
-
-
-def _optional(spec: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    """Return ``spec[key]`` when present, otherwise ``default``."""
-    if key not in spec:
-        return default
-    return spec[key]

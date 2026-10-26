@@ -20,7 +20,12 @@ class CheckTimeoutError(CheckError):
 
 
 class CertificateExpiringError(CheckError):
-    """A TLS certificate is inside an alert window."""
+    """A TLS certificate is inside an alert window or already expired."""
+
+    def __init__(self, message: str, *, severity: object = None) -> None:
+        """Store the message and the severity the check should report."""
+        super().__init__(message)
+        self.severity = severity
 
 
 class ContentMismatchError(CheckError):
