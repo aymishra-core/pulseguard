@@ -29,8 +29,8 @@ _MAX_PORT = 65535
 class TcpCheck(BaseCheck):
     """Open a TCP connection and close it.
 
-    The agent frame protocol is a later phase. This check only answers whether
-    the configured host accepts a connection.
+    This check only answers whether the configured host accepts a connection.
+    Agent frames are a separate protocol and are not spoken here.
     """
 
     kind: ClassVar[str] = "tcp"

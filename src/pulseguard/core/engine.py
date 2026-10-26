@@ -14,7 +14,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pulseguard.checks import build_check
 from pulseguard.checks.models import CheckResult, Severity, utc_now
@@ -36,6 +36,9 @@ from pulseguard.exporters.evidence_pack import write_evidence_pack
 from pulseguard.logging_setup import LOGGER_NAME
 from pulseguard.notifiers.base import Notifier
 from pulseguard.storage.base import Repository
+
+if TYPE_CHECKING:
+    from pulseguard.agent.server import Collector
 
 LOGGER = logging.getLogger(f"{LOGGER_NAME}.core.engine")
 
@@ -75,6 +78,9 @@ class Engine:
         successes_before_resolve: int = DEFAULT_SUCCESSES_BEFORE_RESOLVE,
         notifier: Notifier | None = None,
         evidence_dir: Path | None = None,
+        agent_host: str | None = None,
+        agent_port: int | None = None,
+        agent_token: str | None = None,
     ) -> None:
         """Validate the plan. Nothing runs until ``start``."""
         if not checks:
@@ -94,6 +100,13 @@ class Engine:
         self._notifier = notifier
         self._evidence_dir = evidence_dir
         self._history: dict[str, list[CheckResult]] = {}
+        self._collector: Collector | None = None
+        provided = (agent_host is not None, agent_port is not None, agent_token is not None)
+        if any(provided) and not all(provided):
+            raise ConfigValidationError("agent listen needs a host, a port, and a token")
+        self._agent_host = agent_host
+        self._agent_port = agent_port
+        self._agent_token = agent_token
         self.incidents = IncidentTracker(
             failures_before_open=failures_before_open,
             successes_before_resolve=successes_before_resolve,
@@ -155,6 +168,24 @@ class Engine:
         self._dispatcher.start()
         self._scheduler.start()
         self._started = True
+        if (
+            self._agent_host is not None
+            and self._agent_port is not None
+            and self._agent_token is not None
+        ):
+            from pulseguard.agent.server import Collector
+
+            try:
+                self._collector = Collector(
+                    self._agent_host,
+                    self._agent_port,
+                    self._agent_token,
+                    self._results,
+                )
+                self._collector.start()
+            except Exception:
+                self.stop()
+                raise
 
     def wait(self, seconds: float | None) -> None:
         """Block until ``seconds`` pass, or until ``stop`` if ``seconds`` is None."""
@@ -168,6 +199,14 @@ class Engine:
     def stop(self, timeout: float = 5.0) -> None:
         """Stop scheduling, drain work, and join every engine thread."""
         self._stop.set()
+        collector_error: EngineError | None = None
+        collector = self._collector
+        self._collector = None
+        if collector is not None:
+            try:
+                collector.stop(timeout)
+            except EngineError as exc:
+                collector_error = exc
         self._join(self._scheduler, timeout)
         self._join(self._dispatcher, timeout)
         self._join(self._writer, timeout)
@@ -176,12 +215,24 @@ class Engine:
             executor.shutdown(wait=True, cancel_futures=False)
             self._executor = None
         self._started = False
+        if collector_error is not None:
+            raise collector_error
         if self._writer_error is not None:
             raise EngineError("writer failed") from self._writer_error
 
+    @property
+    def agent_port(self) -> int | None:
+        """Return the bound collector port, or the configured port before start."""
+        collector = self._collector
+        if collector is not None:
+            return collector.port
+        return self._agent_port
+
     def thread_names(self) -> list[str]:
         """Return the engine threads that are still alive."""
-        alive = [self._scheduler, self._dispatcher, self._writer]
+        alive: list[Thread | None] = [self._scheduler, self._dispatcher, self._writer]
+        if self._collector is not None:
+            alive.append(self._collector.thread)
         return [thread.name for thread in alive if thread is not None and thread.is_alive()]
 
     def _schedule_loop(self) -> None:

@@ -11,7 +11,15 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from pulseguard import __version__
+from pulseguard.agent.client import AgentClient
+from pulseguard.agent.protocol import (
+    parse_listen,
+    require_agent_host,
+    require_agent_port,
+    require_token,
+)
 from pulseguard.checks import BaseCheck, CheckResult, HttpCheck, build_check
+from pulseguard.checks.models import Severity, utc_now
 from pulseguard.core.engine import Engine, load_plan
 from pulseguard.exceptions import ConfigValidationError, PulseGuardError
 from pulseguard.exporters import (
@@ -46,6 +54,8 @@ def main(argv: Sequence[str] | None = None, *, stdout: TextIO | None = None) -> 
             return _run_import(args, output)
         if args.command == "backup":
             return _run_backup(args, output)
+        if args.command == "push":
+            return _run_push(args, output)
         raise ConfigValidationError(f"unknown command {args.command}")
     except ConfigValidationError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -68,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_export(sub)
     _add_import(sub)
     _add_backup(sub)
+    _add_push(sub)
     return parser
 
 
@@ -105,7 +116,24 @@ def _add_run(sub: Any) -> None:
         default=None,
         help="write an evidence pack here when an incident opens",
     )
+    run.add_argument(
+        "--agent-listen",
+        default=None,
+        help="collector address, for example 127.0.0.1:9700",
+    )
     _add_log_args(run)
+
+
+def _add_push(sub: Any) -> None:
+    """Add ``push``. It sends one result to a collector and does not probe a URL."""
+    push = sub.add_parser("push", help="send one result to an agent collector")
+    push.add_argument("--host", default="127.0.0.1", help="collector address")
+    push.add_argument("--port", type=int, required=True, help="collector port")
+    push.add_argument("--name", required=True, help="monitor name")
+    push.add_argument("--kind", default="http", help="result kind")
+    push.add_argument("--message", default=None, help="result message")
+    push.add_argument("--fail", action="store_true", help="send a failing result")
+    _add_log_args(push)
 
 
 def _add_export(sub: Any) -> None:
@@ -170,6 +198,7 @@ def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
     if args.duration is not None:
         _require_duration(args.duration)
     database = args.db
+    listen = _agent_listen(args.agent_listen)
     engine = Engine(
         checks,
         repository_factory=lambda: SqliteRepository(database),
@@ -181,6 +210,9 @@ def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
         successes_before_resolve=settings["successes_before_resolve"],
         notifier=_email_notifier(),
         evidence_dir=args.evidence_dir,
+        agent_host=None if listen is None else listen[0],
+        agent_port=None if listen is None else listen[1],
+        agent_token=None if listen is None else listen[2],
     )
     engine.start()
     try:
@@ -195,7 +227,75 @@ def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
         f"stored {engine.stored} results, deferred {engine.deferred}, "
         f"incidents opened {opened} resolved {resolved}\n"
     )
+    if listen is not None:
+        output.write(f"agent {listen[0]}:{listen[1]}\n")
     return 0
+
+
+def _agent_listen(value: str | None) -> tuple[str, int, str] | None:
+    """Read the collector address. The token comes from the environment."""
+    if value is None:
+        return None
+    host, port = parse_listen(value)
+    token = require_token(os.environ.get("PULSEGUARD_AGENT_TOKEN", ""))
+    return host, port, token
+
+
+def _run_push(args: argparse.Namespace, output: TextIO) -> int:
+    """Send one result. The token is read from the environment and not printed."""
+    token = require_token(os.environ.get("PULSEGUARD_AGENT_TOKEN", ""))
+    host = require_agent_host(args.host)
+    port = require_agent_port(args.port, allow_ephemeral=False)
+    name = _push_name(args.name)
+    kind = _push_kind(args.kind)
+    failed = bool(args.fail)
+    message = args.message if args.message is not None else ("HTTP 503" if failed else "HTTP 200")
+    if (
+        not isinstance(message, str)
+        or not message
+        or len(message) > 2000
+        or any(char in message for char in "\r\n")
+    ):
+        raise ConfigValidationError("message must be 1..2000 characters on one line")
+    result = CheckResult(
+        monitor=name,
+        kind=kind,
+        ok=not failed,
+        latency_ms=0,
+        message=message,
+        severity=Severity.CRITICAL if failed else Severity.OK,
+        checked_at=utc_now(),
+    )
+    with AgentClient(host, port, token) as client:
+        client.send(result)
+    output.write(f"sent monitor={result.monitor}\n")
+    return 0
+
+
+def _push_name(value: object) -> str:
+    """Reject a blank or oversized monitor name."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 128
+        or any(char in value for char in "\r\n")
+    ):
+        raise ConfigValidationError("name must be 1..128 characters on one line")
+    return value
+
+
+def _push_kind(value: object) -> str:
+    """Reject a kind the frame decoder would refuse."""
+    letters = "abcdefghijklmnopqrstuvwxyz0123456789_-"
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 32
+        or value[0] not in "abcdefghijklmnopqrstuvwxyz"
+        or any(char not in letters for char in value)
+    ):
+        raise ConfigValidationError("kind must be 1..32 lowercase letters, digits, _ or -")
+    return value
 
 
 def _email_notifier() -> EmailNotifier | None:

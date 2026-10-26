@@ -46,3 +46,7 @@ class EngineError(PulseGuardError):
 
 class AlertError(PulseGuardError):
     """An alert could not be delivered or an evidence pack could not be written."""
+
+
+class ProtocolError(PulseGuardError):
+    """An agent frame was malformed, refused, or the socket could not be used."""

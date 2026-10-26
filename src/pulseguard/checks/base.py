@@ -59,8 +59,8 @@ class BaseCheck(ABC, metaclass=CheckMeta):
     """One configured monitor target.
 
     There is no ``__del__`` here. Checks do not own a socket. Context managers
-    are preferred anywhere a connection must be closed; the later agent
-    connection is the only place a ``__del__`` fallback is planned.
+    are preferred anywhere a connection must be closed. ``AgentClient`` is the
+    only type with a ``__del__`` fallback, and the context manager is preferred.
 
     Class variables (shared): ``kind``, ``default_timeout``, ``default_interval``.
     Instance variables: ``name``, ``_target``, ``_timeout``, ``__interval``.
