@@ -12,6 +12,7 @@ from typing import Any, TextIO
 
 from pulseguard import __version__
 from pulseguard.checks import BaseCheck, CheckResult, HttpCheck, build_check
+from pulseguard.core.engine import Engine, load_plan
 from pulseguard.exceptions import ConfigValidationError, PulseGuardError
 from pulseguard.exporters import (
     read_monitors_csv,
@@ -36,6 +37,8 @@ def main(argv: Sequence[str] | None = None, *, stdout: TextIO | None = None) -> 
         _configure_logging(args)
         if args.command == "check":
             return _run_check(args, output)
+        if args.command == "run":
+            return _run_engine(args, output)
         if args.command == "export":
             return _run_export(args, output)
         if args.command == "import-monitors":
@@ -60,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"pulseguard {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     _add_check(sub)
+    _add_run(sub)
     _add_export(sub)
     _add_import(sub)
     _add_backup(sub)
@@ -81,6 +85,20 @@ def _add_check(sub: Any) -> None:
     )
     check.add_argument("--db", type=Path, help="SQLite file that stores this run")
     _add_log_args(check)
+
+
+def _add_run(sub: Any) -> None:
+    """Add ``run``. It schedules checks until the duration ends or the process is interrupted."""
+    run = sub.add_parser("run", help="schedule checks, then shut the workers down")
+    run.add_argument("--config", type=Path, required=True, help="JSON file with a monitors list")
+    run.add_argument("--db", type=Path, required=True, help="SQLite file the writer thread opens")
+    run.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="seconds to run before shutting down; omit to run until interrupted",
+    )
+    _add_log_args(run)
 
 
 def _add_export(sub: Any) -> None:
@@ -137,6 +155,44 @@ def _run_check(args: argparse.Namespace, output: TextIO) -> int:
         _store_results(args.db, results)
     _write_results(results, output)
     return 0 if all(result.ok for result in results) else 1
+
+
+def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
+    """Schedule checks, let the writer store them, then stop every thread."""
+    checks, edges, settings = load_plan(args.config)
+    if args.duration is not None:
+        _require_duration(args.duration)
+    database = args.db
+    engine = Engine(
+        checks,
+        repository_factory=lambda: SqliteRepository(database),
+        dependencies=edges,
+        workers=settings["workers"],
+        queue_size=settings["queue_size"],
+        host_limit=settings["host_limit"],
+        failures_before_open=settings["failures_before_open"],
+        successes_before_resolve=settings["successes_before_resolve"],
+    )
+    engine.start()
+    try:
+        engine.wait(args.duration)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        engine.stop()
+    opened = sum(1 for item in engine.incidents.transitions if item.action == "open")
+    resolved = sum(1 for item in engine.incidents.transitions if item.action == "resolved")
+    output.write(
+        f"stored {engine.stored} results, deferred {engine.deferred}, "
+        f"incidents opened {opened} resolved {resolved}\n"
+    )
+    return 0
+
+
+def _require_duration(value: float) -> None:
+    """Reject a duration outside the same upper bound as a check interval."""
+    if value <= 0 or value > 86_400:
+        raise ConfigValidationError("duration must be greater than 0 and at most 86400 seconds")
 
 
 def _store_results(path: Path, results: Sequence[CheckResult]) -> None:

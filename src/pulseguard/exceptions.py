@@ -38,3 +38,7 @@ class ConfigValidationError(PulseGuardError):
 
 class StorageError(PulseGuardError):
     """A database or backup operation failed."""
+
+
+class EngineError(PulseGuardError):
+    """The scheduler could not start or shut down cleanly."""

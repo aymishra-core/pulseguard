@@ -35,7 +35,7 @@ class AlertThresholdMixin:
     """Count consecutive mismatches before a result becomes critical.
 
     Hybrid inheritance: ``DefacementCheck(KeywordCheck, AlertThresholdMixin)``.
-    The streak is process-local until the incident engine stores it.
+    The streak stays on the check instance. The engine incident state is separate.
     """
 
     def configure_threshold(self, alert_after: int = 3) -> None:

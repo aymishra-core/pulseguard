@@ -82,3 +82,7 @@ class Repository(ABC):
     @abstractmethod
     def transaction(self) -> AbstractContextManager[None]:
         """Commit on success and roll back when the body raises."""
+
+    def close(self) -> None:
+        """Release the connection. In-memory doubles have nothing to close."""
+        return None
