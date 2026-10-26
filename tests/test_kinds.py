@@ -23,7 +23,7 @@ from pulseguard.exceptions import ConfigValidationError
 from pulseguard.notifiers import ConsoleNotifier
 from pulseguard.notifiers.console_notifier import stderr_notifier
 from tests.local_tls import LocalTlsServer
-from tests.mock_servers import MockHttpServer
+from tests.mock_servers import PAGE_BODY, MockHttpServer
 
 _OK_HASH = hashlib.sha256(b"ok").hexdigest()
 
@@ -59,6 +59,38 @@ def test_keyword_match_miss_and_size_limit() -> None:
         oversized = tiny.run()
         assert oversized.ok is False
         assert "exceeds 1 bytes" in oversized.message
+
+
+def test_keyword_and_defacement_use_visible_text() -> None:
+    """Script, style, and attributes are not the keyword. The hash stays on the raw bytes."""
+    digest = hashlib.sha256(PAGE_BODY).hexdigest()
+    with MockHttpServer() as server:
+        found = KeywordCheck("page", f"{server.base_url}/page", keyword="ok", retries=1)
+        assert found.run().ok is True
+        hidden = KeywordCheck("page", f"{server.base_url}/page", keyword="secretword", retries=1)
+        missed = hidden.run()
+        assert missed.ok is False
+        assert missed.message == "keyword not found"
+        styled = KeywordCheck("page", f"{server.base_url}/page", keyword="color", retries=1)
+        assert styled.run().message == "keyword not found"
+        matched = DefacementCheck(
+            "page",
+            f"{server.base_url}/page",
+            keyword="ok",
+            expected_sha256=digest,
+            alert_after=1,
+            retries=1,
+        )
+        assert matched.run().message == "content matches"
+        keyword_only = DefacementCheck(
+            "page",
+            f"{server.base_url}/page",
+            keyword="secretword",
+            expected_sha256=digest,
+            alert_after=1,
+            retries=1,
+        )
+        assert keyword_only.run().message == "keyword missing (1 of 1)"
 
 
 def test_defacement_streak_uses_the_mixin() -> None:

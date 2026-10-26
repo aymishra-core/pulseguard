@@ -1,4 +1,4 @@
-"""Notifier port. Email delivery is a later phase."""
+"""Notifier port. ``send`` delivers one result. Email is one implementation."""
 
 from __future__ import annotations
 

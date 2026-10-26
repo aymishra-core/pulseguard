@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, ClassVar
 
 import requests
+from bs4 import BeautifulSoup
 
 from pulseguard.checks.base import optional_value, prepare_spec, require_int, require_name_target
 from pulseguard.checks.http_check import HTTP_CONFIG_FIELDS, HttpCheck
@@ -19,11 +20,10 @@ KEYWORD_CONFIG_FIELDS = HTTP_CONFIG_FIELDS | {"keyword", "max_body_bytes"}
 
 
 class KeywordCheck(HttpCheck):
-    """HTTP check that also requires a raw-text keyword.
+    """HTTP check that requires a keyword in the visible page text.
 
-    The search looks at the response bytes decoded as UTF-8. It does not parse
-    HTML. A later phase can switch this to BeautifulSoup so tags and scripts
-    are not part of the searched text.
+    BeautifulSoup drops ``script`` and ``style`` before the search. The parser
+    is the stdlib ``html.parser``. The defacement hash stays on the raw bytes.
     """
 
     kind: ClassVar[str] = "keyword"
@@ -99,9 +99,8 @@ class KeywordCheck(HttpCheck):
         status_result = HttpCheck._interpret(self, status, body, latency_ms)
         if not status_result.ok:
             return status_result
-        text = body.decode("utf-8", errors="replace")
         try:
-            self._require_keyword(text)
+            self._require_keyword(visible_text(body))
         except ContentMismatchError as exc:
             return self._outcome(
                 ok=False,
@@ -119,7 +118,7 @@ class KeywordCheck(HttpCheck):
         )
 
     def _require_keyword(self, text: str) -> None:
-        """Raise when the decoded page does not contain the keyword."""
+        """Raise when the visible text does not contain the keyword."""
         if self.keyword not in text:
             raise ContentMismatchError("keyword not found")
 
@@ -145,6 +144,14 @@ class KeywordCheck(HttpCheck):
             retry_backoff=optional_value(spec, "retry_backoff", 0.2),
             max_body_bytes=optional_value(spec, "max_body_bytes", MAX_BODY_BYTES),
         )
+
+
+def visible_text(body: bytes) -> str:
+    """Return reader-visible text. Script and style contents are removed."""
+    soup = BeautifulSoup(body, "html.parser")
+    for tag in soup.find_all(["script", "style"]):
+        tag.decompose()
+    return soup.get_text(separator=" ", strip=True)
 
 
 def _read_limited(response: requests.Response, limit: int) -> bytes:

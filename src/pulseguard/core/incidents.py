@@ -6,11 +6,15 @@ successes. It cannot close before it opens.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
 from pulseguard.checks.models import CheckResult
 from pulseguard.exceptions import ConfigValidationError
+from pulseguard.logging_setup import LOGGER_NAME
+
+LOGGER = logging.getLogger(f"{LOGGER_NAME}.core.incidents")
 
 # Same bounds as a defacement alert_after. They are limits, not measurements.
 MIN_STREAK = 1
@@ -75,6 +79,7 @@ class IncidentTracker:
             slot.state = "open"
             slot.successes = 0
             self.transitions.append(IncidentTransition(result.monitor, "open", result.checked_at))
+            LOGGER.info("incident opened monitor=%s", result.monitor)
             return "open"
         return None
 
@@ -86,6 +91,7 @@ class IncidentTracker:
         slot.failures = 0
         slot.successes = 0
         self.transitions.append(IncidentTransition(monitor, "resolved", when))
+        LOGGER.info("incident resolved monitor=%s", monitor)
 
     def is_open(self, monitor: str) -> bool:
         """Return True when ``monitor`` has an open incident."""

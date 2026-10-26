@@ -25,6 +25,7 @@ from pulseguard.exporters import (
     write_verified_backup,
 )
 from pulseguard.logging_setup import setup_logging
+from pulseguard.notifiers.email_notifier import EmailNotifier, smtp_settings_from_env
 from pulseguard.storage import SqliteRepository
 
 
@@ -97,6 +98,12 @@ def _add_run(sub: Any) -> None:
         type=float,
         default=None,
         help="seconds to run before shutting down; omit to run until interrupted",
+    )
+    run.add_argument(
+        "--evidence-dir",
+        type=Path,
+        default=None,
+        help="write an evidence pack here when an incident opens",
     )
     _add_log_args(run)
 
@@ -172,6 +179,8 @@ def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
         host_limit=settings["host_limit"],
         failures_before_open=settings["failures_before_open"],
         successes_before_resolve=settings["successes_before_resolve"],
+        notifier=_email_notifier(),
+        evidence_dir=args.evidence_dir,
     )
     engine.start()
     try:
@@ -187,6 +196,13 @@ def _run_engine(args: argparse.Namespace, output: TextIO) -> int:
         f"incidents opened {opened} resolved {resolved}\n"
     )
     return 0
+
+
+def _email_notifier() -> EmailNotifier | None:
+    """Build an email notifier when SMTP is configured. An empty host sends nothing."""
+    if not os.environ.get("PULSEGUARD_SMTP_HOST", "").strip():
+        return None
+    return EmailNotifier(smtp_settings_from_env())
 
 
 def _require_duration(value: float) -> None:

@@ -31,8 +31,10 @@ from pulseguard.core.scheduler import (
     require_schedule_interval,
     select_due,
 )
-from pulseguard.exceptions import ConfigValidationError, EngineError
+from pulseguard.exceptions import AlertError, ConfigValidationError, EngineError
+from pulseguard.exporters.evidence_pack import write_evidence_pack
 from pulseguard.logging_setup import LOGGER_NAME
+from pulseguard.notifiers.base import Notifier
 from pulseguard.storage.base import Repository
 
 LOGGER = logging.getLogger(f"{LOGGER_NAME}.core.engine")
@@ -42,6 +44,8 @@ MIN_WORKERS = 1
 MAX_WORKERS = 32
 MIN_QUEUE = 1
 MAX_QUEUE = 1000
+MAX_HISTORY = 1000
+_REASON_LIMIT = 200
 MIN_TICK_SECONDS = 0.01
 MAX_TICK_SECONDS = 60.0
 DEFAULT_WORKERS = 4
@@ -69,6 +73,8 @@ class Engine:
         tick_seconds: float = DEFAULT_TICK_SECONDS,
         failures_before_open: int = DEFAULT_FAILURES_BEFORE_OPEN,
         successes_before_resolve: int = DEFAULT_SUCCESSES_BEFORE_RESOLVE,
+        notifier: Notifier | None = None,
+        evidence_dir: Path | None = None,
     ) -> None:
         """Validate the plan. Nothing runs until ``start``."""
         if not checks:
@@ -85,6 +91,9 @@ class Engine:
         self._queue_size = _require_bound(queue_size, "queue_size", MIN_QUEUE, MAX_QUEUE)
         self._tick = _require_tick(tick_seconds)
         self._hosts = HostLimiter(host_limit)
+        self._notifier = notifier
+        self._evidence_dir = evidence_dir
+        self._history: dict[str, list[CheckResult]] = {}
         self.incidents = IncidentTracker(
             failures_before_open=failures_before_open,
             successes_before_resolve=successes_before_resolve,
@@ -266,11 +275,56 @@ class Engine:
         else:
             self._down.add(result.monitor)
         suppressed = cause is not None and not result.ok
-        self.incidents.observe(result, suppressed=suppressed)
+        action = self.incidents.observe(result, suppressed=suppressed)
+        self._alert(result, action)
         if repository is not None:
             repository.add_result(result)
         with self._lock:
             self._stored += 1
+
+    def _alert(self, result: CheckResult, action: str | None) -> None:
+        """Write the evidence pack on open, then deliver one alert per transition.
+
+        The incident log line is already written inside the tracker, before this
+        method runs. A suppressed result has ``action is None`` and is not mailed.
+        """
+        if self._evidence_dir is not None:
+            rows = self._history.setdefault(result.monitor, [])
+            rows.append(result)
+            if len(rows) > MAX_HISTORY:
+                del rows[: len(rows) - MAX_HISTORY]
+            if action == "open":
+                try:
+                    write_evidence_pack(
+                        self._evidence_dir,
+                        monitor=result.monitor,
+                        opened_at=result.checked_at,
+                        results=list(rows),
+                        now=utc_now(),
+                    )
+                except AlertError:
+                    LOGGER.warning("evidence pack failed monitor=%s", result.monitor)
+        if self._notifier is None:
+            return
+        if action is not None:
+            try:
+                self._notifier.send(_incident_notice(result, action))
+            except Exception as exc:
+                LOGGER.warning(
+                    "alert delivery failed monitor=%s error=%s",
+                    result.monitor,
+                    type(exc).__name__,
+                )
+        note = getattr(self._notifier, "note", None)
+        if callable(note):
+            try:
+                note(result)
+            except Exception as exc:
+                LOGGER.warning(
+                    "digest note failed monitor=%s error=%s",
+                    result.monitor,
+                    type(exc).__name__,
+                )
 
     def _snapshot_due(self) -> dict[str, float]:
         """Copy due times so the scheduler can read them without holding the lock."""
@@ -405,4 +459,24 @@ def _failed_result(check: ScheduledCheck, exc: Exception) -> CheckResult:
         message=f"check failed: {type(exc).__name__}",
         severity=Severity.CRITICAL,
         checked_at=utc_now(),
+    )
+
+
+def _incident_notice(result: CheckResult, action: str) -> CheckResult:
+    """Build the one result a notifier sees for an open or resolved incident."""
+    reason = " ".join(result.message.split())[:_REASON_LIMIT]
+    opened = action == "open"
+    severity = result.severity if opened else Severity.OK
+    if opened and severity <= Severity.OK:
+        severity = Severity.CRITICAL
+    label = "incident opened" if opened else "incident resolved"
+    return CheckResult(
+        monitor=result.monitor,
+        kind=result.kind,
+        ok=not opened,
+        latency_ms=result.latency_ms,
+        message=f"{label}: {reason}",
+        severity=severity,
+        checked_at=result.checked_at,
+        status_code=result.status_code,
     )

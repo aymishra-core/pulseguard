@@ -1,0 +1,41 @@
+{
+  "monitor": "web",
+  "opened_at": "2026-10-26T17:41:42.995286+00:00",
+  "deadline": "2026-10-26T23:41:42.995286+00:00",
+  "remaining_seconds": 21599,
+  "retain_until": "2027-04-24T17:41:42.996068+00:00",
+  "retention_days": 180,
+  "not_legal_advice": "This pack is an operator worksheet. It is not legal advice and it does not claim to satisfy CERT-In or DPDP directions.",
+  "events": [
+    {
+      "monitor": "web",
+      "kind": "http",
+      "ok": false,
+      "status_code": null,
+      "latency_ms": 4.715915973065421,
+      "message": "request failed: ConnectionError",
+      "severity": "critical",
+      "checked_at": "2026-10-26T17:40:42.810265+00:00"
+    },
+    {
+      "monitor": "web",
+      "kind": "http",
+      "ok": false,
+      "status_code": null,
+      "latency_ms": 4.726875020423904,
+      "message": "request failed: ConnectionError",
+      "severity": "critical",
+      "checked_at": "2026-10-26T17:41:12.908279+00:00"
+    },
+    {
+      "monitor": "web",
+      "kind": "http",
+      "ok": false,
+      "status_code": null,
+      "latency_ms": 7.574458984890953,
+      "message": "request failed: ConnectionError",
+      "severity": "critical",
+      "checked_at": "2026-10-26T17:41:42.995286+00:00"
+    }
+  ]
+}

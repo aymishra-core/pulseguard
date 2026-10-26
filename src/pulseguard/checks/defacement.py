@@ -8,7 +8,12 @@ from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pulseguard.checks.base import optional_value, prepare_spec, require_name_target
-from pulseguard.checks.keyword_check import KEYWORD_CONFIG_FIELDS, MAX_BODY_BYTES, KeywordCheck
+from pulseguard.checks.keyword_check import (
+    KEYWORD_CONFIG_FIELDS,
+    MAX_BODY_BYTES,
+    KeywordCheck,
+    visible_text,
+)
 from pulseguard.checks.mixins import AlertThresholdMixin
 from pulseguard.checks.models import CheckResult, Severity
 from pulseguard.exceptions import ConfigValidationError
@@ -20,10 +25,9 @@ _SHA256_HEX_LENGTH = 64
 class DefacementCheck(KeywordCheck, AlertThresholdMixin):
     """Keyword check that also requires the raw body to hash to a known digest.
 
-    The hash is of the raw bytes, not of visible text. The alert threshold
-    comes from ``AlertThresholdMixin``: mismatches stay at warning until the
-    streak reaches ``alert_after`` (default 3, the same default the incident
-    engine will use).
+    The keyword uses the same visible text as ``KeywordCheck``. The hash is
+    still SHA-256 of the raw bytes. The mismatch streak stays on this instance
+    and is separate from the engine's incident state.
     """
 
     kind: ClassVar[str] = "defacement"
@@ -83,8 +87,7 @@ class DefacementCheck(KeywordCheck, AlertThresholdMixin):
         """Compare the keyword and the body hash, then apply the streak."""
         if status != self.expected_status:
             return KeywordCheck._interpret(self, status, body, latency_ms)
-        text = body.decode("utf-8", errors="replace")
-        keyword_ok = self.keyword in text
+        keyword_ok = self.keyword in visible_text(body)
         digest = hashlib.sha256(body).hexdigest()
         hash_ok = hmac.compare_digest(digest, self.expected_sha256)
         if keyword_ok and hash_ok:

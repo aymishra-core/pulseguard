@@ -26,6 +26,13 @@ class _ThreadingServer(ThreadingHTTPServer):
     allow_reuse_address: ClassVar[bool] = True
 
 
+# Visible text is "ok". The same word inside script, style, and an attribute is not.
+PAGE_BODY = (
+    b"<html><style>.x{color:red}</style><script>secretword</script>"
+    b'<p class="secretword">ok</p></html>'
+)
+
+
 def _handler_for(state: MockState) -> type[BaseHTTPRequestHandler]:
     """Build a handler class closed over ``state``."""
 
@@ -59,6 +66,9 @@ def _handler_for(state: MockState) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/ok":
                 body = b"ok"
+                code = 200
+            elif path == "/page":
+                body = PAGE_BODY
                 code = 200
             else:
                 body = b"missing"

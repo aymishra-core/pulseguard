@@ -106,8 +106,9 @@ def test_host_limiter_refuses_a_second_slot() -> None:
         HostLimiter(0)
 
 
-def test_run_command_stores_a_local_check(tmp_path: Path) -> None:
+def test_run_command_stores_a_local_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``pulseguard run`` writes through the writer thread and then exits."""
+    monkeypatch.delenv("PULSEGUARD_SMTP_HOST", raising=False)
     database = tmp_path / "history.db"
     config = tmp_path / "monitors.json"
     with MockHttpServer() as server:

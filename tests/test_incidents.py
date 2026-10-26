@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -15,8 +16,11 @@ from pulseguard.core.sla import error_budget_remaining, rollup
 from pulseguard.exceptions import ConfigValidationError
 
 
-def test_incident_opens_after_three_failures_and_cannot_close_first() -> None:
-    """K is 3. A success before open does not resolve, and close asserts the invariant."""
+def test_incident_opens_after_three_failures_and_cannot_close_first(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """K is 3. Open and resolve are each logged once, at INFO, with the monitor name."""
+    caplog.set_level(logging.INFO, logger="pulseguard.core.incidents")
     tracker = IncidentTracker(failures_before_open=3, successes_before_resolve=2)
     when = utc_now()
     assert tracker.observe(_result(ok=True, when=when), suppressed=False) is None
@@ -31,13 +35,20 @@ def test_incident_opens_after_three_failures_and_cannot_close_first() -> None:
     assert [item.action for item in tracker.transitions] == ["open", "resolved"]
     with pytest.raises(AssertionError, match="cannot close before it opens"):
         tracker.mark_resolved("web", when)
+    records = [record for record in caplog.records if record.name == "pulseguard.core.incidents"]
+    messages = [record.getMessage() for record in records]
+    assert messages.count("incident opened monitor=web") == 1
+    assert messages.count("incident resolved monitor=web") == 1
+    assert all(record.levelname == "INFO" for record in records)
 
 
-def test_a_suppressed_failure_does_not_open() -> None:
-    """A failure hidden by a down dependency leaves the streak alone."""
+def test_a_suppressed_failure_does_not_open(caplog: pytest.LogCaptureFixture) -> None:
+    """A failure hidden by a down dependency leaves the streak alone and is not logged."""
+    caplog.set_level(logging.INFO, logger="pulseguard.core.incidents")
     tracker = IncidentTracker(failures_before_open=1, successes_before_resolve=1)
     assert tracker.observe(_result(ok=False), suppressed=True) is None
     assert tracker.is_open("web") is False
+    assert "incident opened" not in caplog.text
 
 
 def test_root_cause_walks_to_the_furthest_down_monitor() -> None:

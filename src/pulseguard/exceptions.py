@@ -42,3 +42,7 @@ class StorageError(PulseGuardError):
 
 class EngineError(PulseGuardError):
     """The scheduler could not start or shut down cleanly."""
+
+
+class AlertError(PulseGuardError):
+    """An alert could not be delivered or an evidence pack could not be written."""
