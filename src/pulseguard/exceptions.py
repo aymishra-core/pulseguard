@@ -34,3 +34,7 @@ class ContentMismatchError(CheckError):
 
 class ConfigValidationError(PulseGuardError):
     """Operator configuration failed validation."""
+
+
+class StorageError(PulseGuardError):
+    """A database or backup operation failed."""

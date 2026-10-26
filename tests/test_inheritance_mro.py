@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -22,8 +25,9 @@ from pulseguard.checks import (
 )
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.cli import load_monitor_file
+from pulseguard.exceptions import StorageError
 from pulseguard.notifiers import ConsoleNotifier, Notifier
-from pulseguard.storage import Repository
+from pulseguard.storage import MonitorRecord, Repository
 
 ROOT = Path(__file__).resolve().parents[1]
 _HASH = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df"
@@ -116,14 +120,26 @@ def test_repositories_are_swappable() -> None:
     result = _sample()
     memory = _MemoryRepository()
     counting = _CountingRepository()
+    record = MonitorRecord(
+        name="web",
+        kind="http",
+        target="http://127.0.0.1/health",
+        interval_seconds=60,
+        enabled=True,
+    )
 
     def store(repo: Repository) -> list[CheckResult]:
         repo.add_result(result)
+        repo.save_monitor(record)
+        repo.update_monitor("web", enabled=False)
         return repo.results_for(result.monitor)
 
     assert store(memory) == [result]
+    assert list(memory.iter_results("web", chunk_size=1)) == [result]
     assert store(counting) == [result]
     assert counting.count == 1
+    assert memory.monitors()[0].enabled is False
+    assert counting.monitors()[0].enabled is False
 
 
 class _BucketNotifier(Notifier):
@@ -143,33 +159,103 @@ class _MemoryRepository(Repository):
 
     def __init__(self) -> None:
         """Start empty."""
-        self._rows: dict[str, list[CheckResult]] = {}
+        self._rows: dict[str, list[tuple[int, CheckResult]]] = {}
+        self._next = 1
+        self._monitors: dict[str, MonitorRecord] = {}
 
-    def add_result(self, result: CheckResult) -> None:
+    def add_result(self, result: CheckResult) -> int:
         """Append ``result`` under its monitor name."""
-        self._rows.setdefault(result.monitor, []).append(result)
+        new_id = self._next
+        self._next += 1
+        self._rows.setdefault(result.monitor, []).append((new_id, result))
+        return new_id
 
     def results_for(self, monitor: str) -> list[CheckResult]:
         """Return a copy of the stored results."""
-        return list(self._rows.get(monitor, []))
+        return [result for _row_id, result in self._rows.get(monitor, [])]
+
+    def delete_result(self, result_id: int) -> bool:
+        """Delete one stored result."""
+        for name, rows in self._rows.items():
+            kept = [pair for pair in rows if pair[0] != result_id]
+            if len(kept) != len(rows):
+                self._rows[name] = kept
+                return True
+        return False
+
+    def delete_older_than(self, cutoff: datetime) -> int:
+        """Delete results older than ``cutoff``."""
+        removed = 0
+        for name, rows in list(self._rows.items()):
+            kept = [pair for pair in rows if pair[1].checked_at >= cutoff]
+            removed += len(rows) - len(kept)
+            self._rows[name] = kept
+        return removed
+
+    def save_monitor(self, record: MonitorRecord) -> None:
+        """Store ``record`` under its name."""
+        self._monitors[record.name] = record
+
+    def update_monitor(
+        self,
+        name: str,
+        *,
+        interval_seconds: int | None = None,
+        enabled: bool | None = None,
+    ) -> None:
+        """Change the interval, the enabled flag, or both."""
+        current = self._monitors.get(name)
+        if current is None:
+            raise StorageError(f"unknown monitor {name!r}")
+        self._monitors[name] = MonitorRecord(
+            name=current.name,
+            kind=current.kind,
+            target=current.target,
+            interval_seconds=current.interval_seconds
+            if interval_seconds is None
+            else interval_seconds,
+            enabled=current.enabled if enabled is None else enabled,
+        )
+
+    def monitors(self) -> list[MonitorRecord]:
+        """Return catalog rows sorted by name."""
+        return [self._monitors[name] for name in sorted(self._monitors)]
+
+    def delete_monitor(self, name: str) -> bool:
+        """Delete a catalog row."""
+        return self._monitors.pop(name, None) is not None
+
+    def transaction(self) -> AbstractContextManager[None]:
+        """Roll the double back when the body raises."""
+        return self._transaction()
+
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        """Restore the previous rows if the body raises."""
+        saved_rows = {key: list(value) for key, value in self._rows.items()}
+        saved_next = self._next
+        saved_monitors = dict(self._monitors)
+        try:
+            yield
+        except Exception:
+            self._rows = saved_rows
+            self._next = saved_next
+            self._monitors = saved_monitors
+            raise
 
 
-class _CountingRepository(Repository):
+class _CountingRepository(_MemoryRepository):
     """Test double that counts writes."""
 
     def __init__(self) -> None:
         """Start at zero."""
+        super().__init__()
         self.count = 0
-        self._rows: list[CheckResult] = []
 
-    def add_result(self, result: CheckResult) -> None:
+    def add_result(self, result: CheckResult) -> int:
         """Count and store ``result``."""
         self.count += 1
-        self._rows.append(result)
-
-    def results_for(self, monitor: str) -> list[CheckResult]:
-        """Return results for ``monitor``."""
-        return [row for row in self._rows if row.monitor == monitor]
+        return super().add_result(result)
 
 
 def _sample() -> CheckResult:
