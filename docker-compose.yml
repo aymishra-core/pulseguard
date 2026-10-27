@@ -1,0 +1,16 @@
+services:
+  pulseguard:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Placeholders for a local demo. Replace them before anyone else can open the port.
+      PULSEGUARD_SECRET_KEY: dev-only-secret-key
+      PULSEGUARD_ADMIN_USER: operator
+      PULSEGUARD_ADMIN_PASSWORD: dev-only-password
+      PULSEGUARD_API_KEY: dev-only-api-key1
+    volumes:
+      - pulseguard-data:/data
+
+volumes:
+  pulseguard-data:

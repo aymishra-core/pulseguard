@@ -1,3 +1,3 @@
 """Self-hosted uptime, TLS-expiry and heartbeat monitor."""
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"

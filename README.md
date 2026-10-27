@@ -2,7 +2,7 @@
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Phase 7 serves a status page, an admin login, a JSON API, and a desktop window. Nothing runs a nightly backup, a retention purge, or a timed digest yet.
+Version 1.0.0 serves the status page, the admin login, the JSON API, the desktop window, and a container. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ## What works now
 
@@ -23,6 +23,7 @@ Phase 7 serves a status page, an admin login, a JSON API, and a desktop window. 
 - `pulseguard web --config monitors.json --db history.db` serves the status page on `127.0.0.1:8080` and runs the checks in the same process. The public page and `GET /api/status` read stored rows. They do not contact monitor targets, and they do not show catalog targets. `POST /api/monitors` requires `X-API-Key`. Admin pages use a session login and a CSRF token. The password is hashed with PBKDF2-HMAC-SHA256 for 100000 iterations.
 - `pulseguard console --db history.db` opens the desktop window. A loader thread queues snapshots. `after()` applies them, and widget calls raise if they are not on the main thread. The SLA form uses the same error-budget helper as the stored rollups.
 - `ConsoleNotifier.send` and `EmailNotifier.send` are the notifier implementations.
+- `pulseguard.ml.anomaly.detect` flags a latency sample that sits above a fixed multiple of the median absolute deviation. `detect_in_process` runs that score in a worker process. The series is data you already have. The function does not contact a host.
 - MySQL is the same repository interface. Install it with `pip install 'pulseguard[mysql]'` and set `PULSEGUARD_MYSQL_*` in `.env`. The CLI itself opens SQLite.
 - Private and localhost targets are allowed by default, because the monitor runs on your machine. `--deny-private` rejects localhost names and literal non-public IPs for an ad-hoc URL. The same switch exists on TCP, DNS, and TLS configs.
 
@@ -30,9 +31,9 @@ Phase 7 serves a status page, an admin login, a JSON API, and a desktop window. 
 
 It does not send the digest or purge old rows on a schedule. It does not scan hosts you did not configure. `run` and `web` on the sample file probe that file's local placeholders. The collector and the web server do not listen on a public address or on `0.0.0.0`. The public status page does not fetch a user-supplied URL. Tests that open a connection use `127.0.0.1`, `localhost` from the hosts file, a certificate generated in a temporary directory, a local SMTP listener, or a local agent collector. The MySQL tests use a scripted connection unless `PULSEGUARD_MYSQL_HOST` is set. The desktop test skips the Tk window when there is no display.
 
-Redirects are not followed. Hostnames are not resolved during validation, so turning private targets off does not stop a public name from pointing at a private address later. That gap stays until a later phase, and the public status page must never fetch a user-supplied URL.
+Redirects are not followed. Hostnames are not resolved during validation, so turning private targets off does not stop a public name from pointing at a private address later. That gap remains. The public status page does not fetch a user-supplied URL.
 
-Operator input is bounded. Intervals are 30–86400 seconds, timeouts at most 120 seconds, retries 1–5, backoff 0–30 seconds, names 1–128 characters, and URLs at most 2048 characters. Keyword text is 1–200 characters, a body read is at most 1048576 bytes, `alert_after` is 1–20, a defacement hash is 64 hex characters, DNS expects 1–8 addresses, TCP and TLS ports are 1–65535, heartbeat tokens are 16–128 characters, and heartbeat grace is 30–604800 seconds. Stored messages are at most 2000 characters, a catalog target is at most 2048 characters, history pages are 1–1000 rows, and retention is 1–3650 days (the helper defaults to 180). The engine allows 1–32 workers, a job queue of 1–1000, and a per-host cap of 1–32. `failures_before_open` and `successes_before_resolve` are 1–20. A monitor may list up to 8 dependencies, and groups may nest 8 levels. An evidence pack keeps at most 1000 events, and its countdown is 6 hours. A digest keeps at most 100 lines. SMTP settings allow a host of 1–255 characters, a port of 1–65535, and 1–8 recipients. An agent frame payload is at most 8192 bytes, a collector handles at most 8 connections at once, and a frame read waits at most 5 seconds. The agent token is 16–128 characters. The web session key is 16–128 characters, the admin password is 8–128, the API key is 16–128, and a web request body is at most 16384 bytes. The status window polls every 200 milliseconds and the loader waits 1 second. The SLA form accepts 1–100000 samples. The web server uses 4 worker threads. Those caps are validation limits, not performance figures. There are no benchmark numbers in this repository yet.
+Operator input is bounded. Intervals are 30–86400 seconds, timeouts at most 120 seconds, retries 1–5, backoff 0–30 seconds, names 1–128 characters, and URLs at most 2048 characters. Keyword text is 1–200 characters, a body read is at most 1048576 bytes, `alert_after` is 1–20, a defacement hash is 64 hex characters, DNS expects 1–8 addresses, TCP and TLS ports are 1–65535, heartbeat tokens are 16–128 characters, and heartbeat grace is 30–604800 seconds. Stored messages are at most 2000 characters, a catalog target is at most 2048 characters, history pages are 1–1000 rows, and retention is 1–3650 days (the helper defaults to 180). The engine allows 1–32 workers, a job queue of 1–1000, and a per-host cap of 1–32. `failures_before_open` and `successes_before_resolve` are 1–20. A monitor may list up to 8 dependencies, and groups may nest 8 levels. An evidence pack keeps at most 1000 events, and its countdown is 6 hours. A digest keeps at most 100 lines. SMTP settings allow a host of 1–255 characters, a port of 1–65535, and 1–8 recipients. An agent frame payload is at most 8192 bytes, a collector handles at most 8 connections at once, and a frame read waits at most 5 seconds. The agent token is 16–128 characters. The web session key is 16–128 characters, the admin password is 8–128, the API key is 16–128, and a web request body is at most 16384 bytes. The status window polls every 200 milliseconds and the loader waits 1 second. The SLA form accepts 1–100000 samples. The web server uses 4 worker threads. The anomaly scorer accepts 3–100000 samples and repeats a timing run at most 100000 times. Those caps are validation limits, not performance figures.
 
 ## Run a check
 
@@ -87,10 +88,57 @@ pulseguard push --port 9700 --name web --message "HTTP 200"
 ## Checks
 
 ```bash
-ruff check src tests
-ruff format --check src tests
+ruff check src tests benchmarks
+ruff format --check src tests benchmarks
 mypy
 pytest
 ```
 
-`pytest` prints coverage for `pulseguard`. The figure in that output is the one this revision actually measured.
+`pytest` prints coverage for `pulseguard`. The figure in that output is the one that command measured.
+
+## Layout
+
+```mermaid
+flowchart LR
+  scheduler[Scheduler] --> jobs[Bounded job queue]
+  jobs --> workers[Thread pool]
+  workers --> results[Result queue]
+  results --> writer[SQLite writer]
+  writer --> incidents[Incidents and notifiers]
+  agents[Agent frames] --> results
+  writer --> page[Status page]
+  writer --> console[Desktop console]
+```
+
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.0.0 tag notes.
+
+## Container
+
+```bash
+docker compose up --build
+```
+
+The image runs as the user `pulseguard`. Compose publishes the status page on `127.0.0.1:8080`. The process listens on the container's own address. The compose file sets placeholder values for the session key, the admin password, and the API key so a clean checkout can start. Replace them before anyone else can open the port. The sample monitor file still probes its local placeholders. The desktop window is not in the image.
+
+## Benchmark
+
+`benchmarks/bench_threads_vs_processes.py` times the anomaly scorer on a series built in the script. It does not open a socket. This is the output from the run that accompanied the 1.0.0 notes:
+
+```
+tasks=4
+workers=2
+repeats=20000
+samples=33
+sequential_s=0.746322
+threads_s=0.741287
+processes_s=0.433625
+```
+
+Run the script again for a new measurement. Those seconds belong to that run.
+
+## Security and what is still ahead
+
+Admin writes need a session and a CSRF token, or `X-API-Key` for `POST /api/monitors`. The public page reads stored rows. Details are in `docs/security.md`.
+
+Still ahead: a nightly verified backup, a retention purge, and a timed digest. Hostnames are still not resolved during validation.
+
