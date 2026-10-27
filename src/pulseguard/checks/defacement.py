@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, ClassVar
 
 from pulseguard.checks.base import optional_value, prepare_spec, require_name_target
@@ -18,7 +18,7 @@ from pulseguard.checks.mixins import AlertThresholdMixin
 from pulseguard.checks.models import CheckResult, Severity
 from pulseguard.exceptions import ConfigValidationError
 
-DEFACEMENT_CONFIG_FIELDS = KEYWORD_CONFIG_FIELDS | {"expected_sha256", "alert_after"}
+DEFACEMENT_CONFIG_FIELDS = KEYWORD_CONFIG_FIELDS | {"expected_sha256", "alert_after", "baseline"}
 _SHA256_HEX_LENGTH = 64
 
 
@@ -38,8 +38,9 @@ class DefacementCheck(KeywordCheck, AlertThresholdMixin):
         target: str,
         *,
         keyword: str,
-        expected_sha256: str,
+        expected_sha256: str = "",
         alert_after: int = 3,
+        learn: bool = False,
         timeout: float | None = None,
         interval: float | None = None,
         expected_status: int = 200,
@@ -63,7 +64,11 @@ class DefacementCheck(KeywordCheck, AlertThresholdMixin):
             retry_backoff=retry_backoff,
             max_body_bytes=max_body_bytes,
         )
-        self.expected_sha256 = expected_sha256
+        self._persist_baseline: Callable[[str], None] | None = None
+        self._learn = learn
+        self._expected_sha256 = ""
+        if expected_sha256 or not learn:
+            self.expected_sha256 = expected_sha256
         self.configure_threshold(alert_after)
 
     @property
@@ -89,6 +94,27 @@ class DefacementCheck(KeywordCheck, AlertThresholdMixin):
             return KeywordCheck._interpret(self, status, body, latency_ms)
         keyword_ok = self.keyword in visible_text(body)
         digest = hashlib.sha256(body).hexdigest()
+        if self._learn and not self._expected_sha256:
+            if not keyword_ok:
+                streak = self.note_mismatch()
+                return self._outcome(
+                    ok=False,
+                    status=status,
+                    latency_ms=latency_ms,
+                    message=f"keyword missing ({streak} of {self.alert_after})",
+                    severity=self.severity_for_streak(),
+                )
+            self.expected_sha256 = digest
+            if self._persist_baseline is not None:
+                self._persist_baseline(digest)
+            self.note_match()
+            return self._outcome(
+                ok=True,
+                status=status,
+                latency_ms=latency_ms,
+                message="baseline learned",
+                severity=Severity.OK,
+            )
         hash_ok = hmac.compare_digest(digest, self.expected_sha256)
         if keyword_ok and hash_ok:
             self.note_match()
@@ -120,14 +146,22 @@ class DefacementCheck(KeywordCheck, AlertThresholdMixin):
         name, target = require_name_target(spec)
         try:
             keyword = spec["keyword"]
-            expected_sha256 = spec["expected_sha256"]
         except KeyError as exc:
             raise ConfigValidationError(f"missing {exc.args[0]}") from exc
+        baseline = optional_value(spec, "baseline", "manual")
+        if baseline not in {"learn", "manual"}:
+            raise ConfigValidationError("baseline must be learn or manual")
+        raw_hash = spec.get("expected_sha256", "")
+        if not isinstance(raw_hash, str):
+            raise ConfigValidationError("expected_sha256 must be a string")
+        if baseline != "learn" and not raw_hash.strip():
+            raise ConfigValidationError("missing expected_sha256")
         return cls(
             name,
             target,
             keyword=keyword,
-            expected_sha256=expected_sha256,
+            expected_sha256=raw_hash.strip(),
+            learn=baseline == "learn",
             alert_after=optional_value(spec, "alert_after", 3),
             timeout=optional_value(spec, "timeout"),
             interval=optional_value(spec, "interval"),

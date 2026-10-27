@@ -28,14 +28,9 @@
 {% if empty %}
 <section class="empty">
   <h2>No monitors yet</h2>
-  <p>Add one monitor, or load the local lab set.</p>
   <p>
     <a class="button" href="{{ url_for('monitor_new') }}">Add your first monitor</a>
   </p>
-  <form method="post" action="{{ url_for('demo') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <button type="submit">Load demo monitors</button>
-  </form>
 </section>
 {% endif %}
 <div class="cards" data-board>

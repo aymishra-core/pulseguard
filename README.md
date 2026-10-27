@@ -9,15 +9,24 @@ Open the browser page, create the admin account, and add monitors from there. `.
 
 ## Try it in 2 minutes
 
+The test lab is a separate program. It is not part of PulseGuard.
+
 ```sh
 python tools/lab.py
 ```
 
-In another terminal, run `pulseguard serve`, create the admin account, and choose **Load demo monitors**. The lab listens on `127.0.0.1:8799` (a page whose body is `Acme Shop`) and `127.0.0.1:8798` (a TCP port that accepts a connection and closes it). Open `http://127.0.0.1:8799/control` to switch that page to UP, DOWN, or DEFACED, or to send a heartbeat ping.
+In another terminal, run `pulseguard serve` and create the admin account. Click **Add monitor** and type each of these:
+
+- HTTP, name `web`, address `http://127.0.0.1:8799/`
+- keyword, address `http://127.0.0.1:8799/`, keyword `Acme Shop`
+- TCP, address `127.0.0.1`, port `8798`
+- heartbeat, then copy its address and token into the boxes on the lab page
+
+On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**. For a defacement monitor, leave the baseline on **Learn from the first successful check** before you deface the page.
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.1.1 opens `pulseguard serve` at `/`, which goes to setup, login, or the dashboard. The public status page stays at `/status`. Version 1.1.0 adds `pulseguard serve`: first-run setup and the signed-in pages for monitors, incidents, certificates, alerts, SLA, agents, and backups. `run`, `web`, `check`, `console`, `export`, `backup`, and `push` are unchanged. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.1.2 keeps the test lab as its own program. PulseGuard only monitors what you type into Add monitor. A defacement check can learn the SHA-256 of the first successful response, or you can type the hash. A heartbeat monitor shows its ping URL and token after you save it. Version 1.1.1 opens `pulseguard serve` at `/`, which goes to setup, login, or the dashboard. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -36,7 +45,7 @@ Version 1.1.1 opens `pulseguard serve` at `/`, which goes to setup, login, or th
 - `pulseguard check` loads every kind from JSON through the check registry and runs it once. The result is a JSON array.
 - HTTP status, keyword, defacement hash, TCP connect, DNS, TLS certificate expiry, and heartbeat grace.
 - Keyword search uses BeautifulSoup on the page. `script` and `style` tags are removed before the search. The parser is the stdlib `html.parser`.
-- Defacement matches that same visible text, then hashes the raw response bytes. Repeated mismatches stay at warning until `alert_after` (default 3), then become critical. The streak stays on the check instance. An open incident is stored in the database and is still open after a restart.
+- Defacement matches that same visible text, then hashes the raw response bytes. The baseline is either the hash you type or the hash of the first successful response. Repeated mismatches stay at warning until `alert_after` (default 3), then become critical. The streak stays on the check instance. An open incident is stored in the database and is still open after a restart.
 - TLS reads `notAfter` and alerts inside the 30, 14, 7, 3, and 1 day windows.
 - A heartbeat target is an unguessable token. `pulseguard web` calls `record_ping` from `/ping/<token>` on the same objects the scheduler runs. The token is not copied into the result or the access log. `pulseguard serve` also stores the last ping time, so a restart does not forget it.
 - `pulseguard check --db history.db` stores that run in SQLite. Without `--db`, the command only prints JSON.
@@ -138,7 +147,7 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.1 tag notes.
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.2 tag notes.
 
 ## Container
 

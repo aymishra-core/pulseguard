@@ -7,10 +7,28 @@
       block.hidden = kinds.indexOf(kind.value) === -1;
     });
   }
+  function showBaseline() {
+    var chosen = document.querySelector("input[name=baseline]:checked");
+    var mode = chosen ? chosen.value : "learn";
+    document.querySelectorAll("[data-baseline]").forEach(function (block) {
+      var on = block.getAttribute("data-baseline") === mode;
+      block.hidden = !on;
+      block.querySelectorAll("input, textarea, select").forEach(function (input) {
+        input.disabled = !on;
+      });
+    });
+  }
   if (kind) {
-    kind.addEventListener("change", showFields);
+    kind.addEventListener("change", function () {
+      showFields();
+      showBaseline();
+    });
     showFields();
   }
+  document.querySelectorAll("input[name=baseline]").forEach(function (radio) {
+    radio.addEventListener("change", showBaseline);
+  });
+  showBaseline();
 
   document.addEventListener("click", function (event) {
     var button = event.target.closest("[data-copy]");

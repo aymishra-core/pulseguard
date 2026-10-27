@@ -557,6 +557,43 @@ def _client(database: Path):
     return app.test_client()
 
 
+def test_catalog_stores_a_learned_defacement_hash(tmp_path: Path) -> None:
+    """The first good body is written back onto the catalog row."""
+    import hashlib
+
+    from pulseguard.checks.defacement import DefacementCheck
+    from pulseguard.core.catalog import checks_from_catalog
+
+    database = tmp_path / "history.db"
+    body = b"<h1>Acme Shop</h1>"
+    with SqliteRepository(database) as repo:
+        repo.save_monitor(
+            MonitorRecord(
+                name="page",
+                kind="defacement",
+                target="http://127.0.0.1/",
+                interval_seconds=30,
+                enabled=True,
+            )
+        )
+        repo.save_options(
+            "page",
+            {"keyword": "Acme Shop", "baseline": "learn", "allow_private": True},
+        )
+    engine = Engine((), repository_factory=lambda: SqliteRepository(database), catalog=True)
+    with SqliteRepository(database) as repo:
+        checks, _edges = checks_from_catalog(repo, on_baseline=engine._store_baseline)
+    check = checks[0]
+    assert isinstance(check, DefacementCheck)
+    learned = check._interpret(200, body, 1.0)
+    assert learned.ok is True
+    assert learned.message == "baseline learned"
+    with SqliteRepository(database) as repo:
+        stored = repo.monitor_options("page")
+    assert stored["expected_sha256"] == hashlib.sha256(body).hexdigest()
+    assert stored["keyword"] == "Acme Shop"
+
+
 def _csrf(html: str) -> str:
     """Read the hidden token from a rendered form."""
     import re

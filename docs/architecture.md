@@ -14,6 +14,8 @@ The status page reads stored rows. It does not contact monitor targets. `/ping/<
 
 The signed-in pages are server-rendered Jinja in `web/pages.py`, with one CSS file and one script. GET pages do not fetch a monitor URL. Run check now is a POST the operator submits. `pulseguard serve` opens `/` and sends that request to setup, login, or the dashboard. The public status page stays at `/status`, and it can be turned off. `pulseguard web` still serves the public page at `/` and keeps `/admin`.
 
+PulseGuard does not ship sample monitors. Every address, port, keyword, and token comes from the Add monitor form. A defacement monitor stores the SHA-256 of the first successful body when its baseline is learn, or it uses the hash the operator typed. `tools/lab.py` is a separate program. The application does not import it and does not start it.
+
 The desktop console is a separate process. It reads the same SQLite file. A loader thread queues one snapshot, and the main thread applies it.
 
 `docs/concurrency-design.md` covers the threads. `docs/security.md` covers the bind address, login, and the status page. `docs/syllabus-coverage.md` maps the course topics to files.

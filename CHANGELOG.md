@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 - 2026-10-27
+
+- The test lab is a separate program. PulseGuard no longer creates demo monitors or mentions the lab.
+- A defacement monitor can learn its SHA-256 from the first successful check, or the operator can type the hash.
+- A new heartbeat monitor shows its ping URL and token with a copy button.
+
 ## 1.1.1 - 2026-10-27
 
 `pulseguard serve` opens `/`. That page sends a new install to setup, a signed-out visitor to login, and a signed-in operator to the dashboard. The public status page stays at `/status`. `/admin` remains on `pulseguard web` only.

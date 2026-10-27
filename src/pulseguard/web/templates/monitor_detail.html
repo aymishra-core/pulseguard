@@ -5,9 +5,16 @@
 <p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }}</p>
 <p>{{ message or "no results yet" }}</p>
 {% if record.kind != "heartbeat" %}<p>Target {{ record.target }}</p>{% endif %}
-{% if ping %}
-<p><code>{{ ping }}</code></p>
-<button type="button" data-copy="{{ ping }}">Copy curl</button>
+{% if record.kind == "heartbeat" %}
+<p>PulseGuard address</p>
+<p><code>{{ request.host_url.rstrip('/') }}</code>
+<button type="button" data-copy="{{ request.host_url.rstrip('/') }}">Copy address</button></p>
+<p>Token</p>
+<p><code>{{ record.target }}</code>
+<button type="button" data-copy="{{ record.target }}">Copy token</button></p>
+<p>Ping URL</p>
+<p><code>{{ request.host_url }}ping/{{ record.target }}</code>
+<button type="button" data-copy="{{ request.host_url }}ping/{{ record.target }}">Copy ping URL</button></p>
 {% endif %}
 <section class="summary">
   <article><h2>24 h</h2><p>{{ uptime_24 }}</p></article>

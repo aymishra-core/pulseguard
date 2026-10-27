@@ -149,6 +149,11 @@ input, select {
   border: 1px solid var(--line);
   border-radius: 6px;
 }
+input[type="checkbox"], input[type="radio"] {
+  width: auto;
+  padding: 0;
+  vertical-align: middle;
+}
 button, .button {
   display: inline-block;
   background: var(--accent);
@@ -171,6 +176,7 @@ button, .button {
 .result { font-size: 1.05rem; }
 .empty { max-width: 36rem; }
 pre, code { font-family: ui-monospace, monospace; }
+code { overflow-wrap: anywhere; }
 pre {
   white-space: pre-wrap;
   background: var(--panel);

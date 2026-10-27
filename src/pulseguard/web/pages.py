@@ -29,6 +29,7 @@ from werkzeug.wrappers import Response as RedirectResponse
 
 from pulseguard.agent.protocol import require_agent_host, require_agent_port, require_token
 from pulseguard.checks.base import build_check
+from pulseguard.checks.defacement import DefacementCheck
 from pulseguard.checks.heartbeat import HeartbeatCheck
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.core.incidents import require_streak
@@ -62,7 +63,6 @@ from pulseguard.web.board import (
     window,
 )
 from pulseguard.web.console import _password_matches, _repository, _signed_in
-from pulseguard.web.demo import load_demo
 
 _KINDS = ("http", "keyword", "defacement", "tcp", "dns", "tls", "heartbeat")
 _CSV_LIMIT = 1_000_000
@@ -90,16 +90,6 @@ def register_pages(app: Flask) -> None:
         with _repository() as repo:
             body = _dashboard_body(repo)
         return jsonify(_json_ready(body))
-
-    @app.post("/demo")
-    def demo() -> str | RedirectResponse | tuple[str, int]:
-        denied = _guard()
-        if denied is not None:
-            return denied
-        with _repository() as repo:
-            load_demo(repo)
-        _flash("Demo monitors saved")
-        return redirect(url_for("dashboard"))
 
     @app.get("/monitors")
     def monitor_list() -> str | RedirectResponse | tuple[str, int]:
@@ -637,6 +627,17 @@ def _monitor_form(name: str | None) -> str | RedirectResponse | tuple[str, int]:
 def _save_monitor(existing: str | None) -> None:
     """Validate with the check registry, then store the catalog row and options."""
     spec, options, enabled = _spec_from_form(existing)
+    if (
+        spec.get("kind") == "defacement"
+        and spec.get("baseline") == "learn"
+        and "expected_sha256" not in spec
+        and existing is not None
+    ):
+        with _repository() as repo:
+            previous = repo.monitor_options(existing).get("expected_sha256")
+        if isinstance(previous, str) and previous:
+            spec["expected_sha256"] = previous
+            options["expected_sha256"] = previous
     check = build_check(spec)
     if existing is not None and check.name != existing:
         raise ConfigValidationError("the monitor name cannot change")
@@ -681,8 +682,15 @@ def _spec_from_form(existing: str | None) -> tuple[dict[str, object], dict[str, 
         options["keyword"] = spec["keyword"]
         _copy_optional(spec, options, "max_body_bytes")
     if kind == "defacement":
-        spec["expected_sha256"] = str(request.form.get("expected_sha256", "")).strip()
-        options["expected_sha256"] = spec["expected_sha256"]
+        baseline = str(request.form.get("baseline", "learn")).strip()
+        if baseline not in {"learn", "manual"}:
+            raise ConfigValidationError("baseline must be learn or manual")
+        options["baseline"] = baseline
+        spec["baseline"] = baseline
+        digest = str(request.form.get("expected_sha256", "")).strip()
+        if baseline == "manual" or digest:
+            spec["expected_sha256"] = digest
+            options["expected_sha256"] = digest
         _copy_optional(spec, options, "alert_after")
     if kind in {"tcp", "tls"}:
         port = _number("port", default=None)
@@ -874,7 +882,17 @@ def _run_check(name: str) -> str:
         spec.update(
             {key: value for key, value in repo.monitor_options(name).items() if key != "depends_on"}
         )
-        result = build_check(spec).run()
+        check = build_check(spec)
+        if isinstance(check, DefacementCheck):
+
+            def _remember(digest: str) -> None:
+                stored = repo.monitor_options(name)
+                stored["expected_sha256"] = digest
+                stored["baseline"] = "learn"
+                repo.save_options(name, stored)
+
+            check._persist_baseline = _remember
+        result = check.run()
         repo.add_result(result)
     return result.message
 

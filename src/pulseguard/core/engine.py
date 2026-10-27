@@ -290,6 +290,7 @@ class Engine:
             checks, edges = checks_from_catalog(
                 repo,
                 on_ping=self._store_ping,
+                on_baseline=self._store_baseline,
                 cache=self._catalog_cache,
             )
             failures, successes = default_thresholds(repo)
@@ -369,6 +370,25 @@ class Engine:
                 "%Y-%m-%dT%H:%M:%S+00:00"
             )
             setter("agent_seen", json.dumps(seen, sort_keys=True)[:2048])
+        finally:
+            repo.close()
+
+    def _store_baseline(self, monitor: str, digest: str) -> None:
+        """Store a learned defacement hash. The body and the URL are not logged."""
+        if self._factory is None:
+            return
+        repo = self._factory()
+        try:
+            reader = getattr(repo, "monitor_options", None)
+            writer = getattr(repo, "save_options", None)
+            if not callable(reader) or not callable(writer):
+                return
+            current = reader(monitor)
+            if not isinstance(current, dict):
+                current = {}
+            current["expected_sha256"] = digest
+            current["baseline"] = "learn"
+            writer(monitor, current)
         finally:
             repo.close()
 

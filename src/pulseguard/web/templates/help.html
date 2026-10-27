@@ -6,6 +6,7 @@
 <p>An incident opens after K failures in a row. The default K is 3, and you can set it from 1 to 20 on the Alerts page. Further failures while it is open do not open a second incident.</p>
 <p>An incident resolves after M successes in a row. The default M is 1. A success is counted even when another monitor this one depends on is down. A failure is not, so a shared outage stays attached to the monitor that failed first.</p>
 <p>Every open and resolve is written to the alert log. If SMTP is not configured the status is "not configured". The log is how you see alerts without a mail server.</p>
+<p>You type every monitor. Nothing is filled in for you. A defacement monitor can learn the SHA-256 of the first successful response, or you can type the hash. A heartbeat monitor shows its ping URL and token after you save it, with a button to copy each one.</p>
 <p>The public status page reads stored results. It does not contact the monitored targets, and it does not show targets or tokens.</p>
 <p>The same rules are written in docs/architecture.md and docs/security.md next to the program.</p>
 {% endblock %}

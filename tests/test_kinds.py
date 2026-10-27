@@ -380,6 +380,45 @@ def test_defacement_reports_a_status_miss_and_both_content_problems() -> None:
         assert failed.message == "keyword missing, body hash differs (1 of 1)"
 
 
+def test_defacement_learns_the_first_successful_body() -> None:
+    """A learn baseline stores the hash of the first good body and then compares."""
+    body = b"<h1>Acme Shop</h1><p>Welcome. Status: all systems normal.</p>"
+    learned: list[str] = []
+    check = build_check(
+        {
+            "kind": "defacement",
+            "name": "page",
+            "target": "http://127.0.0.1/",
+            "keyword": "Acme Shop",
+            "baseline": "learn",
+            "interval": 30,
+        }
+    )
+    assert isinstance(check, DefacementCheck)
+    check._persist_baseline = learned.append
+    first = check._interpret(200, body, 1.0)
+    assert first.ok is True
+    assert first.message == "baseline learned"
+    assert learned == [hashlib.sha256(body).hexdigest()]
+    changed = check._interpret(200, b"<h1>HACKED by anon</h1>", 1.0)
+    assert changed.ok is False
+    assert "body hash differs" in changed.message
+    fresh = build_check(
+        {
+            "kind": "defacement",
+            "name": "page",
+            "target": "http://127.0.0.1/",
+            "keyword": "missing",
+            "baseline": "learn",
+            "interval": 30,
+        }
+    )
+    assert isinstance(fresh, DefacementCheck)
+    missed = fresh._interpret(200, body, 1.0)
+    assert missed.ok is False
+    assert fresh.expected_sha256 == ""
+
+
 def test_console_notifier_writes_the_stream_it_was_given() -> None:
     """A stream receives the same line the notifier keeps."""
     result = CheckResult(

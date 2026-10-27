@@ -25,10 +25,16 @@
     <input id="token" name="token" value="{{ values.token or '' }}" />
     <p class="help">Leave blank to generate one. It is the secret in the ping URL.</p>
     {% if values.token %}
+    <p>PulseGuard address</p>
+    <p><code>{{ request.host_url.rstrip('/') }}</code>
+    <button type="button" data-copy="{{ request.host_url.rstrip('/') }}">Copy address</button></p>
+    <p>Token</p>
+    <p><code id="ping-token">{{ values.token }}</code>
+    <button type="button" data-copy="{{ values.token }}">Copy token</button></p>
     <p>Ping URL</p>
-    <code id="ping-url">{{ request.host_url }}ping/{{ values.token }}</code>
-    <button type="button" id="copy-ping" data-copy="curl -fsS '{{ request.host_url }}ping/{{ values.token }}'">Copy curl</button>
-    <p class="help">The curl line uses this server. It is shown only on this page.</p>
+    <p><code id="ping-url">{{ request.host_url }}ping/{{ values.token }}</code>
+    <button type="button" data-copy="{{ request.host_url }}ping/{{ values.token }}">Copy ping URL</button></p>
+    <p class="help">Paste the address and token into whatever sends the ping. Shown only on this page.</p>
     {% endif %}
   </div>
   <label for="interval">Interval (seconds)</label>
@@ -57,9 +63,20 @@
     <input id="max_body_bytes" name="max_body_bytes" value="{{ values.max_body_bytes or '' }}" />
   </div>
   <div data-kinds="defacement">
-    <label for="expected_sha256">Expected SHA-256</label>
-    <input id="expected_sha256" name="expected_sha256" value="{{ values.expected_sha256 or '' }}" />
-    <p class="help">64 hex characters. The hash is of the raw response bytes.</p>
+    <fieldset>
+      <legend>Baseline</legend>
+      <label><input type="radio" name="baseline" value="learn" {% if values.baseline != 'manual' %}checked{% endif %} /> Learn from the first successful check</label>
+      <p class="help">The first response with the expected status and the keyword is stored as the SHA-256 baseline.</p>
+      <label><input type="radio" name="baseline" value="manual" {% if values.baseline == 'manual' %}checked{% endif %} /> Enter hash manually</label>
+    </fieldset>
+    {% if values.baseline != 'manual' and values.expected_sha256 %}
+    <p>Learned baseline <code>{{ values.expected_sha256 }}</code></p>
+    {% endif %}
+    <div data-baseline="manual">
+      <label for="expected_sha256">Expected SHA-256</label>
+      <input id="expected_sha256" name="expected_sha256" value="{{ values.expected_sha256 or '' }}" />
+      <p class="help">64 hex characters. The hash is of the raw response bytes.</p>
+    </div>
     <label for="alert_after">Alert after</label>
     <input id="alert_after" name="alert_after" value="{{ values.alert_after or '' }}" />
     <p class="help">How many mismatches before the result is critical. 1–20.</p>

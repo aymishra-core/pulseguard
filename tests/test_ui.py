@@ -14,7 +14,6 @@ from pulseguard.core.engine import Engine
 from pulseguard.notifiers.settings_notifier import DatabaseNotifier
 from pulseguard.storage import SqliteRepository
 from pulseguard.web.app import create_app
-from pulseguard.web.demo import load_demo
 
 _PASSWORD = "s3cret-password"
 _API_KEY = "example-api-key-value"
@@ -26,10 +25,10 @@ def test_pages_require_login_and_csrf(tmp_path: Path) -> None:
     anonymous = _app(tmp_path / "other.db").test_client()
     assert anonymous.get("/monitors").status_code == 302
     assert anonymous.get("/api/dashboard").status_code == 401
-    assert client.post("/demo", data={"name": "x"}).status_code == 400
     page = client.get("/dashboard")
     assert b"Add your first monitor" in page.data
-    assert b"Load demo monitors" in page.data
+    assert b"Load demo" not in page.data
+    assert b"lab set" not in page.data
 
 
 def test_monitor_form_validates_and_a_pause_reaches_the_scheduler(tmp_path: Path) -> None:
@@ -86,7 +85,8 @@ def test_monitor_form_validates_and_a_pause_reaches_the_scheduler(tmp_path: Path
         engine.stop()
     detail = client.get("/monitors/job/view")
     assert detail.status_code == 200
-    assert b"job" in detail.data
+    assert b"Copy token" in detail.data
+    assert b"Copy ping URL" in detail.data
     edited = client.post(
         "/monitors/job",
         data={"csrf_token": token, "kind": "heartbeat", "interval": "45", "enabled": "1"},
@@ -96,10 +96,8 @@ def test_monitor_form_validates_and_a_pause_reaches_the_scheduler(tmp_path: Path
         assert repo.monitors()[0].interval_seconds == 45
 
 
-def test_dashboard_demo_alerts_sla_and_settings(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Demo monitors, the calculator, and a test alert do not need a mail server."""
+def test_dashboard_alerts_sla_and_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typed monitor, the calculator, and a test alert do not need a mail server."""
     for name in (
         "PULSEGUARD_SMTP_HOST",
         "PULSEGUARD_SMTP_PORT",
@@ -114,12 +112,15 @@ def test_dashboard_demo_alerts_sla_and_settings(
     with SqliteRepository(database) as repo:
         repo.set_setting("smtp_password", "super-secret-mail")
     token = _csrf(client.get("/dashboard").get_data(as_text=True))
-    assert client.post("/demo", data={"csrf_token": token}).status_code == 302
+    created = client.post(
+        "/monitors/new",
+        data=_fields(csrf_token=token, kind="http", name="web", target="http://127.0.0.1/"),
+    )
+    assert created.status_code == 302
     board = client.get("/dashboard")
-    assert b"shop-keyword" in board.data
-    assert b"nightly-job" in board.data
+    assert b"web" in board.data
     payload = client.get("/api/dashboard").get_json()
-    assert "shop-depends" in {row["name"] for row in payload["monitors"]}
+    assert "web" in {row["name"] for row in payload["monitors"]}
     alerts = client.get("/alerts")
     assert b"super-secret-mail" not in alerts.data
     assert b"password is saved" in alerts.data
@@ -523,7 +524,6 @@ def test_anonymous_routes_form_errors_and_helpers(
     for path in gets:
         assert anonymous.get(path).status_code == 302
     posts = (
-        "/demo",
         "/monitors/new",
         "/monitors/web",
         "/monitors/web/pause",
@@ -843,20 +843,58 @@ def test_notifier_reports_missing_smtp(tmp_path: Path, monkeypatch: pytest.Monke
         )
 
 
-def test_load_demo_builds_the_lab_set(tmp_path: Path) -> None:
-    """The demo helper stores the six local monitors."""
-    database = tmp_path / "history.db"
+def test_defacement_baseline_is_typed_or_learned(tmp_path: Path) -> None:
+    """A blank learn baseline saves. A manual baseline still needs a hash."""
+    client, database = _login(tmp_path)
+    token = _csrf(client.get("/monitors/new").get_data(as_text=True))
+    learned = client.post(
+        "/monitors/new",
+        data=_fields(
+            csrf_token=token,
+            kind="defacement",
+            name="page",
+            target="http://127.0.0.1/",
+            keyword="Acme Shop",
+            baseline="learn",
+        ),
+    )
+    assert learned.status_code == 302
     with SqliteRepository(database) as repo:
-        load_demo(repo)
-        names = {record.name for record in repo.monitors()}
-    assert names == {
-        "web",
-        "shop-keyword",
-        "shop-defacement",
-        "lab-port",
-        "nightly-job",
-        "shop-depends",
-    }
+        stored = repo.monitor_options("page")
+    assert stored["baseline"] == "learn"
+    assert "expected_sha256" not in stored
+    digest = "ab" * 32
+    with SqliteRepository(database) as repo:
+        options = repo.monitor_options("page")
+        options["expected_sha256"] = digest
+        repo.save_options("page", options)
+    kept = client.post(
+        "/monitors/page",
+        data=_fields(
+            csrf_token=token,
+            kind="defacement",
+            target="http://127.0.0.1/",
+            keyword="Acme Shop",
+            baseline="learn",
+        ),
+    )
+    assert kept.status_code == 302
+    with SqliteRepository(database) as repo:
+        assert repo.monitor_options("page")["expected_sha256"] == digest
+    form = client.get("/monitors/new")
+    assert b"Learn from the first successful check" in form.data
+    manual = client.post(
+        "/monitors/new",
+        data=_fields(
+            csrf_token=token,
+            kind="defacement",
+            name="typed",
+            target="http://127.0.0.1/",
+            keyword="Acme Shop",
+            baseline="manual",
+        ),
+    )
+    assert b"expected_sha256" in manual.data
 
 
 def _login(tmp_path: Path):

@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from pulseguard.checks.base import build_check
+from pulseguard.checks.defacement import DefacementCheck
 from pulseguard.checks.heartbeat import HeartbeatCheck
 from pulseguard.core.scheduler import ScheduledCheck
 from pulseguard.exceptions import ConfigValidationError
@@ -26,6 +27,7 @@ def checks_from_catalog(
     repository: Repository,
     *,
     on_ping: Callable[[str, datetime], None] | None = None,
+    on_baseline: Callable[[str, str], None] | None = None,
     cache: dict[str, tuple[str, ScheduledCheck]] | None = None,
 ) -> tuple[tuple[ScheduledCheck, ...], dict[str, tuple[str, ...]]]:
     """Return enabled checks and their dependency edges.
@@ -66,6 +68,14 @@ def checks_from_catalog(
                             on_ping(name, moment)
 
                     check._persist_ping = _save
+            if isinstance(check, DefacementCheck) and on_baseline is not None:
+                learned_name = check.name
+
+                def _save_baseline(digest: str, name: str = learned_name) -> None:
+                    if on_baseline is not None:
+                        on_baseline(name, digest)
+
+                check._persist_baseline = _save_baseline
             kept[record.name] = (signature, check)
         seen.add(record.name)
         checks.append(check)
