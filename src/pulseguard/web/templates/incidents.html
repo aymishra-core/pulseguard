@@ -3,9 +3,9 @@
 {% block body %}
 <h1>Incidents</h1>
 <p class="note">{{ advice }}</p>
-<p>
-  <a href="{{ url_for('incident_list', tab='open') }}">Open</a>
-  <a href="{{ url_for('incident_list', tab='resolved') }}">Resolved</a>
+<p class="segmented">
+  <a href="{{ url_for('incident_list', tab='open') }}" {% if tab == 'open' %}aria-current="page"{% endif %}>Open</a>
+  <a href="{{ url_for('incident_list', tab='resolved') }}" {% if tab == 'resolved' %}aria-current="page"{% endif %}>Resolved</a>
 </p>
 {% if not rows %}
 <p class="empty">No {{ tab }} incidents.</p>
@@ -18,9 +18,9 @@
     {% for row in rows %}
     <tr>
       <td><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.monitor }}</a></td>
-      <td>{{ row.started_at }}</td>
-      <td>{{ row.ended_at or "—" }}</td>
-      <td>{{ duration(row.started_at, row.ended_at) }}</td>
+      <td><time datetime="{{ row.started_at }}">{{ row.started_at }}</time></td>
+      <td>{% if row.ended_at %}<time datetime="{{ row.ended_at }}">{{ row.ended_at }}</time>{% else %}—{% endif %}</td>
+      <td {% if tab == 'open' %}data-tick="{{ row.started_at }}"{% endif %}>{{ duration(row.started_at, row.ended_at) }}</td>
       <td>{{ row.cause or row.reason }}</td>
     </tr>
     {% endfor %}

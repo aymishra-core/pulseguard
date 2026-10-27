@@ -20,6 +20,16 @@
     {% endif %}
   </div>
 </section>
+<section class="panel" id="onboarding">
+  <h2>First steps</h2>
+  <ol>
+    <li>Create account — done</li>
+    <li>{% if empty %}Add your first monitor{% else %}Add a monitor — done{% endif %}</li>
+    <li><a href="{{ url_for('alerts') }}">Set up alerts</a></li>
+    <li><a href="{{ url_for('monitor_new') }}">Add a heartbeat</a> and copy its token into the job that should ping you</li>
+  </ol>
+  <button type="button" id="hide-onboarding" class="btn-secondary">Hide checklist</button>
+</section>
 <section class="summary" aria-label="Summary">
   <article class="stat"><h2>Up</h2><p class="metric">{{ counts.up }}</p></article>
   <article class="stat"><h2>Down</h2><p class="metric">{{ counts.down }}</p></article>

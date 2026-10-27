@@ -2,9 +2,19 @@
 {% block title %}{% if editing %}Edit{% else %}Add{% endif %} monitor · PulseGuard{% endblock %}
 {% block body %}
 <h1>{% if editing %}Edit {{ values.name }}{% else %}Add a monitor{% endif %}</h1>
+<p class="steps" id="steps"><span class="on" data-step-tab="1">1. Kind</span><span data-step-tab="2">2. Details</span><span data-step-tab="3">3. Review</span></p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <div class="kind-cards" id="kind-cards">
+    <button type="button" data-pick-kind="http"><strong>HTTP</strong><span class="help">Did the address answer with the status you expect? Example: 127.0.0.1</span></button>
+    <button type="button" data-pick-kind="keyword"><strong>Keyword</strong><span class="help">Does the visible page text include a phrase you chose?</span></button>
+    <button type="button" data-pick-kind="defacement"><strong>Defacement</strong><span class="help">Did the page bytes stay the same as the baseline hash?</span></button>
+    <button type="button" data-pick-kind="tcp"><strong>TCP</strong><span class="help">Does the port accept a connection? Example: 127.0.0.1 port 8080</span></button>
+    <button type="button" data-pick-kind="dns"><strong>DNS</strong><span class="help">Does the name resolve to the addresses you listed?</span></button>
+    <button type="button" data-pick-kind="tls"><strong>TLS</strong><span class="help">Will the certificate expire soon?</span></button>
+    <button type="button" data-pick-kind="heartbeat"><strong>Heartbeat</strong><span class="help">Did a job you run ping PulseGuard recently enough?</span></button>
+  </div>
   <label for="kind">Kind</label>
   <select id="kind" name="kind">
     {% for kind in kinds %}
@@ -34,6 +44,8 @@
     <p>Ping URL</p>
     <p><code id="ping-url">{{ request.host_url }}ping/{{ values.token }}</code>
     <button type="button" data-copy="{{ request.host_url }}ping/{{ values.token }}">Copy ping URL</button></p>
+    <p><code>curl -fsS '{{ request.host_url }}ping/{{ values.token }}'</code>
+    <button type="button" data-copy="curl -fsS '{{ request.host_url }}ping/{{ values.token }}'">Copy curl</button></p>
     <p class="help">Paste the address and token into whatever sends the ping. Shown only on this page.</p>
     {% endif %}
   </div>
@@ -108,7 +120,12 @@
   </select>
   <p class="help">While a selected monitor is down, a failure here does not open a new incident.</p>
   <label><input type="checkbox" name="enabled" value="1" {% if values.enabled != false %}checked{% endif %} /> Enabled</label>
-  <p><button type="submit">Save</button></p>
+  <p id="scheme-offer" class="help" hidden></p>
+  <p id="probe-result" class="panel" hidden></p>
+  <p>
+    <button type="button" id="probe" class="btn-secondary">Test this check now</button>
+    <button type="submit">Save</button>
+  </p>
 </form>
 {% if editing %}
 <form method="post" action="{{ url_for('monitor_check', name=values.name) }}">
@@ -123,7 +140,7 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <button type="submit">Duplicate</button>
 </form>
-<form method="post" action="{{ url_for('monitor_delete', name=values.name) }}" onsubmit="return confirm('Delete this monitor?')">
+<form method="post" action="{{ url_for('monitor_delete', name=values.name) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <button type="submit">Delete</button>
 </form>

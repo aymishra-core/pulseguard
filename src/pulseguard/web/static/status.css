@@ -321,6 +321,14 @@ th { font-size: var(--text-sm); color: var(--muted); }
 .filters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
 .filters input, .filters select { width: 10rem; }
 
+.banner {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-weight: 650;
+}
 .toast {
   position: fixed;
   right: var(--space-4);
@@ -465,6 +473,15 @@ pre {
 .ring.up { animation: pulse 2.8s var(--ease-out) infinite; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+.timeline { list-style: none; margin: var(--space-4) 0; padding: 0; }
+.timeline li { margin: 0; padding: 0 0 var(--space-3) var(--space-4); border-left: 2px solid var(--line); }
+.kind-cards, .cards-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.kind-cards button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); min-height: 40px; }
+.kind-cards button.is-on { outline: 2px solid var(--accent); }
+.drop { display: block; border: 1px dashed var(--line); border-radius: var(--radius); padding: var(--space-4); background: var(--surface-2); }
+.segmented a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--space-3); color: var(--ink); text-decoration: none; }
+.segmented a[aria-current="page"] { background: var(--accent); color: var(--on-accent); }
+meter { width: 8rem; height: 0.7rem; vertical-align: middle; margin-left: var(--space-2); }
 .steps { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
 .steps span { color: var(--muted); }
 .steps .on { color: var(--ink); font-weight: 700; }

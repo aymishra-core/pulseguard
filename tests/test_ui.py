@@ -843,6 +843,41 @@ def test_notifier_reports_missing_smtp(tmp_path: Path, monkeypatch: pytest.Monke
         )
 
 
+def test_probe_runs_one_unsaved_check_and_then_slows_down(tmp_path: Path) -> None:
+    """Test-this-check needs a login and will not run twice in two seconds."""
+    client, _database = _login(tmp_path)
+    token = _csrf(client.get("/monitors/new").get_data(as_text=True))
+    first = client.post(
+        "/monitors/probe",
+        data=_fields(
+            csrf_token=token,
+            kind="tcp",
+            name="probe",
+            target="127.0.0.1",
+            port="1",
+            timeout="1",
+        ),
+    )
+    assert first.status_code == 200
+    body = first.get_json()
+    assert body["state"] in {"up", "down"}
+    assert "message" in body
+    second = client.post(
+        "/monitors/probe",
+        data=_fields(
+            csrf_token=token,
+            kind="tcp",
+            name="probe",
+            target="127.0.0.1",
+            port="1",
+            timeout="1",
+        ),
+    )
+    assert second.status_code == 429
+    anonymous = _app(tmp_path / "other.db").test_client()
+    assert anonymous.post("/monitors/probe", data={"kind": "tcp"}).status_code == 302
+
+
 def test_defacement_baseline_is_typed_or_learned(tmp_path: Path) -> None:
     """A blank learn baseline saves. A manual baseline still needs a hash."""
     client, database = _login(tmp_path)

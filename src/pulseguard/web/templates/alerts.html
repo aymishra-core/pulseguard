@@ -6,10 +6,10 @@
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <label for="failures_before_open">Failures before an incident opens</label>
-  <input id="failures_before_open" name="failures_before_open" value="{{ settings.failures_before_open }}" />
+  <input id="failures_before_open" name="failures_before_open" type="number" min="1" max="20" step="1" value="{{ settings.failures_before_open }}" />
   <p class="help">1–20. The default is 3.</p>
   <label for="successes_before_resolve">Successes before it resolves</label>
-  <input id="successes_before_resolve" name="successes_before_resolve" value="{{ settings.successes_before_resolve }}" />
+  <input id="successes_before_resolve" name="successes_before_resolve" type="number" min="1" max="20" step="1" value="{{ settings.successes_before_resolve }}" />
   <p class="help">1–20. The default is 1.</p>
   <label for="smtp_host">SMTP host</label>
   <input id="smtp_host" name="smtp_host" value="{{ settings.smtp_host }}" />
@@ -45,7 +45,7 @@
       <td>{{ row.monitor }}</td>
       <td>{{ row.kind }}</td>
       <td>{{ row.recipient }}</td>
-      <td>{{ row.status }}</td>
+      <td><span class="pill {% if row.status == 'sent' %}up{% elif row.status == 'failed' %}down{% else %}unknown{% endif %}">{{ row.status }}</span></td>
       <td>{{ row.error_text }}</td>
     </tr>
     {% endfor %}

@@ -168,12 +168,113 @@
     radio.addEventListener("change", showBaseline);
   });
   showBaseline();
+  var monitorForm = document.querySelector("form");
+  var probeButton = document.querySelector("#probe");
+  var probeResult = document.querySelector("#probe-result");
+  var schemeOffer = document.querySelector("#scheme-offer");
+  var targetInput = document.querySelector("#target");
+  function offerScheme() {
+    if (!schemeOffer || !targetInput || !kind) return;
+    var httpKind = kind.value === "http" || kind.value === "keyword" || kind.value === "defacement";
+    var value = targetInput.value.trim();
+    if (httpKind && value && value.indexOf("://") === -1) {
+      schemeOffer.hidden = false;
+      schemeOffer.textContent = "";
+      var use = document.createElement("button");
+      use.type = "button";
+      use.className = "btn-secondary";
+      var scheme = "https:" + "//";
+      use.textContent = "Use " + scheme + value;
+      use.addEventListener("click", function () { targetInput.value = scheme + value; offerScheme(); });
+      schemeOffer.appendChild(document.createTextNode("This address has no scheme. "));
+      schemeOffer.appendChild(use);
+    } else {
+      schemeOffer.hidden = true;
+    }
+  }
+  if (targetInput) targetInput.addEventListener("input", offerScheme);
+  if (kind) kind.addEventListener("change", offerScheme);
+  if (probeButton && monitorForm) {
+    probeButton.addEventListener("click", function () {
+      probeButton.classList.add("is-loading");
+      var body = new FormData(monitorForm);
+      fetch("/monitors/probe", { method: "POST", body: body, headers: { Accept: "application/json" } })
+        .then(function (response) { return response.json().then(function (payload) { return { ok: response.ok, payload: payload }; }); })
+        .then(function (result) {
+          if (!probeResult) return;
+          probeResult.hidden = false;
+          if (!result.ok) probeResult.textContent = result.payload.error || "The check was not run.";
+          else probeResult.textContent = (result.payload.state || "") + " · " + result.payload.latency_ms + " ms · " + result.payload.message;
+        })
+        .finally(function () { probeButton.classList.remove("is-loading"); });
+    });
+  }
+  if (monitorForm && monitorForm.querySelector("#name")) {
+    var dirty = false;
+    monitorForm.addEventListener("input", function () { dirty = true; });
+    monitorForm.addEventListener("submit", function () { dirty = false; });
+    window.addEventListener("beforeunload", function (event) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+  }
+  document.querySelectorAll("[data-fill-target]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var input = document.querySelector("#target");
+      if (input) input.value = button.getAttribute("data-fill-target") || "";
+    });
+  });
+  var helpSearch = document.querySelector("#help-search");
+  if (helpSearch) {
+    helpSearch.addEventListener("input", function () {
+      var needle = helpSearch.value.toLowerCase();
+      document.querySelectorAll("[data-guide] p").forEach(function (node) {
+        node.hidden = Boolean(needle) && node.textContent.toLowerCase().indexOf(needle) === -1;
+      });
+    });
+  }
+  var showAgain = document.querySelector("#show-onboarding");
+  if (showAgain) {
+    showAgain.addEventListener("click", function () {
+      writeStore("pulseguard-onboarding", "show");
+      showAgain.textContent = "The checklist will show on the dashboard.";
+    });
+  }
+  var checklist = document.querySelector("#onboarding");
+  if (checklist && readStore("pulseguard-onboarding") === "hide") checklist.hidden = true;
+  var hideChecklist = document.querySelector("#hide-onboarding");
+  if (hideChecklist && checklist) {
+    hideChecklist.addEventListener("click", function () {
+      writeStore("pulseguard-onboarding", "hide");
+      checklist.hidden = true;
+    });
+  }
+  var password = document.querySelector("#new_password");
+  if (password) {
+    var hint = document.createElement("p");
+    hint.className = "help";
+    hint.id = "strength";
+    password.insertAdjacentElement("afterend", hint);
+    password.addEventListener("input", function () {
+      var size = password.value.length;
+      hint.textContent = size === 0 ? "" : (size < 8 ? "Too short. Use at least 8 characters." : "Long enough.");
+    });
+  }
 
   document.addEventListener("click", function (event) {
     var button = event.target.closest("[data-copy]");
     if (!button) return;
     var value = button.getAttribute("data-copy") || "";
-    var done = function () { button.textContent = "Copied"; };
+    var done = function () {
+      button.textContent = "Copied";
+      var note = document.createElement("p");
+      note.className = "toast";
+      note.setAttribute("role", "status");
+      note.textContent = "Copied";
+      document.body.appendChild(note);
+      setTimeout(function () { note.remove(); }, 2000);
+    };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(value).then(done);
       return;
@@ -227,12 +328,13 @@
       var y = height - (value / peak) * (height - 8) - 4;
       return (index * step).toFixed(1) + "," + y.toFixed(1);
     }).join(" ");
-    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    var svgNs = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(svgNs, "svg");
     svg.setAttribute("class", "spark");
     svg.setAttribute("viewBox", "0 0 120 36");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "latency");
-    var line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    var line = document.createElementNS(svgNs, "polyline");
     line.setAttribute("fill", "none");
     line.setAttribute("points", coords);
     svg.appendChild(line);
@@ -248,6 +350,20 @@
     if (seconds < 3600) return Math.round(seconds / 60) + " m ago";
     if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
     return text;
+  }
+  function paintTicks() {
+    document.querySelectorAll("[data-tick]").forEach(function (node) {
+      var start = new Date(node.getAttribute("data-tick"));
+      if (Number.isNaN(start.getTime())) return;
+      var seconds = Math.max(0, Math.round((Date.now() - start.getTime()) / 1000));
+      var minutes = Math.floor(seconds / 60);
+      var hours = Math.floor(minutes / 60);
+      minutes %= 60;
+      var sec = seconds % 60;
+      if (hours) node.textContent = hours + "h " + minutes + "m";
+      else if (minutes) node.textContent = minutes + "m " + sec + "s";
+      else node.textContent = sec + "s";
+    });
   }
   function paintTimes() {
     document.querySelectorAll("time[datetime]").forEach(function (node) {
@@ -273,7 +389,50 @@
     });
   }
   paintTimes();
-  setInterval(paintTimes, 1000);
+  paintTicks();
+  setInterval(function () { paintTimes(); paintTicks(); }, 1000);
+  document.querySelectorAll("[data-pick-kind]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var select = document.querySelector("#kind");
+      if (!select) return;
+      select.value = button.getAttribute("data-pick-kind") || select.value;
+      select.dispatchEvent(new Event("change"));
+      document.querySelectorAll("[data-pick-kind]").forEach(function (other) {
+        other.classList.toggle("is-on", other === button);
+      });
+    });
+  });
+  var nameField = document.querySelector("#name");
+  if (nameField) {
+    nameField.addEventListener("input", function () {
+      var bad = nameField.value && !/^[A-Za-z0-9_-]{1,128}$/.test(nameField.value);
+      nameField.setAttribute("aria-invalid", bad ? "true" : "false");
+    });
+  }
+  document.querySelectorAll("input[type=file]").forEach(function (input) {
+    input.addEventListener("change", function () {
+      var meta = input.parentElement && input.parentElement.querySelector(".file-meta");
+      var file = input.files && input.files[0];
+      if (!meta) return;
+      meta.textContent = file ? file.name + " · " + file.size + " bytes" : "";
+    });
+    var zone = input.closest(".drop");
+    if (!zone) return;
+    zone.addEventListener("dragover", function (event) { event.preventDefault(); });
+    zone.addEventListener("drop", function (event) {
+      event.preventDefault();
+      if (event.dataTransfer && event.dataTransfer.files.length) {
+        input.files = event.dataTransfer.files;
+        input.dispatchEvent(new Event("change"));
+      }
+    });
+  });
+  var slaResult = document.querySelector(".result");
+  var slaGauge = document.querySelector("#sla-gauge");
+  if (slaResult && slaGauge) {
+    var achieved = slaResult.textContent.match(/Achieved ([0-9.]+)%/);
+    if (achieved) slaGauge.value = Number(achieved[1]);
+  }
   document.addEventListener("click", function (event) {
     var opener = event.target.closest("[data-open]");
     if (opener) {

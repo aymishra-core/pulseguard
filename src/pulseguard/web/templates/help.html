@@ -9,4 +9,24 @@
 <p>You type every monitor. Nothing is filled in for you. A defacement monitor can learn the SHA-256 of the first successful response, or you can type the hash. A heartbeat monitor shows its ping URL and token after you save it, with a button to copy each one.</p>
 <p>The public status page reads stored results. It does not contact the monitored targets, and it does not show targets or tokens.</p>
 <p>The same rules are written in docs/architecture.md and docs/security.md next to the program.</p>
+<input id="help-search" type="search" placeholder="Search help" aria-label="Search help" />
+<section data-guide>
+  <h2>Check kinds</h2>
+  <p data-guide>HTTP: did the address answer with the status you expect?</p>
+  <p data-guide>Keyword: does the visible page text include a phrase you chose?</p>
+  <p data-guide>Defacement: did the page bytes stay the same as the baseline hash?</p>
+  <p data-guide>TCP: does the port accept a connection?</p>
+  <p data-guide>DNS: does the name resolve to the addresses you listed?</p>
+  <p data-guide>TLS: will the certificate expire soon?</p>
+  <p data-guide>Heartbeat: did a job you run ping PulseGuard recently enough?</p>
+</section>
+<section data-guide>
+  <h2>Glossary</h2>
+  <p data-guide>DNS is the name that points at an address.</p>
+  <p data-guide>TCP is a connection to a port, with no web page involved.</p>
+  <p data-guide>TLS is the certificate that expires on a date.</p>
+  <p data-guide>A heartbeat is a ping from a job. If the ping stops, the job may have stopped.</p>
+  <p data-guide>An incident is K failures in a row. One failure is a down check, not yet an incident.</p>
+</section>
+<p><button type="button" id="show-onboarding">Show the first-run checklist again</button></p>
 {% endblock %}

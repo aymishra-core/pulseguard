@@ -3,7 +3,7 @@
 {% block body %}
 <h1>Agents</h1>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-<p>Collector {% if enabled and bound %}listening on port {{ bound }}{% elif enabled %}enabled, waiting for the next reload{% else %}off{% endif %}.</p>
+<p><span class="pill {% if enabled and bound %}up{% elif enabled %}warn{% else %}unknown{% endif %}">{% if enabled and bound %}listening{% elif enabled %}waiting{% else %}off{% endif %}</span> Collector {% if enabled and bound %}listening on port {{ bound }}{% elif enabled %}enabled, waiting for the next reload{% else %}off{% endif %}.</p>
 <p class="help">The collector binds a loopback or private address only. 0.0.0.0 is refused.</p>
 {% if revealed %}
 <p>Token, shown once:</p>
@@ -28,7 +28,8 @@
   <p><button type="submit">Save</button></p>
 </form>
 <h2>Push snippet</h2>
-<pre>PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web</pre>
+<pre id="push-snippet">PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web</pre>
+<button type="button" data-copy="PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web">Copy snippet</button>
 <h2>Last seen</h2>
 {% if not seen %}
 <p class="empty">No agent has reported yet.</p>

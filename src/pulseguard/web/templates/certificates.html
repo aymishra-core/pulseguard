@@ -12,8 +12,8 @@
     {% for row in rows %}
     <tr>
       <td><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></td>
-      <td>{{ row.days if row.days is not none else "unknown" }}</td>
-      <td><span class="pill {{ row.band }}">{{ row.band }}</span></td>
+      <td class="metric">{{ row.days if row.days is not none else "unknown" }}{% if row.days is not none %}<meter min="0" max="90" value="{{ row.days if row.days > 0 else 0 }}" aria-label="days left"></meter>{% endif %}</td>
+      <td><span class="pill {{ row.band }}">{{ row.band }}</span> {% if row.band == 'critical' %}Renew now.{% elif row.band == 'warn' %}Renew this month.{% elif row.band == 'ok' %}No action yet.{% endif %}</td>
       <td>{{ row.message }}</td>
     </tr>
     {% endfor %}

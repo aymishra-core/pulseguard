@@ -57,6 +57,9 @@
             <button type="submit" class="btn-secondary">Log out</button>
           </form>
         </header>
+        {% if nav_incidents %}
+        <p class="banner" role="status">{{ nav_incidents }} open incident{% if nav_incidents != 1 %}s{% endif %}. <a href="{{ url_for('incident_list') }}">See what to check</a></p>
+        {% endif %}
         {% if flash %}
         <p class="toast {{ flash_level }}" role="status">{{ flash }}</p>
         {% endif %}

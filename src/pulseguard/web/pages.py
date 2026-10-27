@@ -9,6 +9,7 @@ import io
 import json
 import math
 import secrets
+import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -57,6 +58,7 @@ from pulseguard.web.board import (
     activity_lines,
     certificate_band,
     days_remaining,
+    hint_for,
     latency_chart,
     latest_by_name,
     monitor_state,
@@ -115,6 +117,31 @@ def register_pages(app: Flask) -> None:
     @app.route("/monitors/new", methods=["GET", "POST"])
     def monitor_new() -> str | RedirectResponse | tuple[str, int]:
         return _monitor_form(None)
+
+    @app.post("/monitors/probe")
+    def monitor_probe() -> (
+        Response | tuple[Response, int] | str | RedirectResponse | tuple[str, int]
+    ):
+        """Run one unsaved check. Login, CSRF, and a rate limit are required."""
+        denied = _guard()
+        if denied is not None:
+            return denied
+        if not _probe_allowed(_signed_in() or ""):
+            return jsonify({"error": "slow down"}), 429
+        try:
+            spec, _options, _enabled = _spec_from_form(None)
+            check = build_check(spec)
+        except ConfigValidationError as exc:
+            return jsonify({"error": str(exc)}), 400
+        result = check.run()
+        return jsonify(
+            {
+                "ok": result.ok,
+                "state": "up" if result.ok else "down",
+                "message": plain_message(result.message),
+                "latency_ms": round(result.latency_ms),
+            }
+        )
 
     @app.route("/monitors/<name>", methods=["GET", "POST"])
     def monitor_edit(name: str) -> str | RedirectResponse | tuple[str, int]:
@@ -270,7 +297,19 @@ def register_pages(app: Flask) -> None:
                 for item in repo.results_for(row.monitor)
                 if _in_incident(item.checked_at, row.started_at, row.ended_at)
             ]
-        return _page("incident.html", row=row, results=results, advice=NOT_LEGAL_ADVICE)
+            ended = row.ended_at or "9999"
+            alerts = [
+                item
+                for item in repo.alerts()
+                if item.monitor == row.monitor and row.started_at <= item.created_at <= ended
+            ]
+        return _page(
+            "incident.html",
+            row=row,
+            results=results,
+            alerts=alerts,
+            advice=NOT_LEGAL_ADVICE,
+        )
 
     @app.get("/incidents/<int:incident_id>/evidence")
     def incident_evidence(incident_id: int) -> str | RedirectResponse | Response | tuple[str, int]:
@@ -605,6 +644,7 @@ def register_pages(app: Flask) -> None:
         return _page("help.html")
 
     app.add_template_global(_duration, name="duration")
+    app.add_template_global(hint_for, name="hint_for")
 
 
 def _monitor_form(name: str | None) -> str | RedirectResponse | tuple[str, int]:
@@ -1056,6 +1096,21 @@ def _agent_seen(raw: str | None) -> list[tuple[str, str]]:
     if not isinstance(parsed, dict):
         return []
     return sorted((str(key), str(value)) for key, value in parsed.items())
+
+
+_probes: dict[str, list[float]] = {}
+
+
+def _probe_allowed(user: str) -> bool:
+    """Allow 30 probes an hour and at least 2 seconds between them."""
+    now = time.monotonic()
+    recent = [stamp for stamp in _probes.get(user, []) if now - stamp < 3600]
+    if len(recent) >= 30 or (recent and now - recent[-1] < 2):
+        _probes[user] = recent
+        return False
+    recent.append(now)
+    _probes[user] = recent
+    return True
 
 
 def _page(template: str, **extra: Any) -> str:

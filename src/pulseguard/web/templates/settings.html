@@ -15,7 +15,7 @@
   <p><button type="submit">Save</button></p>
 </form>
 <h2>API key</h2>
-<p><code>{{ api_key }}</code></p>
+<p><code id="api-key">{{ api_key }}</code> <button type="button" data-copy="{{ api_key }}">Copy API key</button></p>
 <p class="help">Send it as X-API-Key on POST /api/monitors. It is not written to the log.</p>
 <form method="post" action="{{ url_for('settings_api_key') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

@@ -4,7 +4,10 @@
 <h1>SLA calculator</h1>
 <p class="help">The target is a number you choose, between 0 and 1. It is not a measurement from this program.</p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-{% if result %}<p class="result" role="status">{{ result }}</p>{% endif %}
+{% if result %}
+<p class="result" role="status">{{ result }}</p>
+<meter id="sla-gauge" min="0" max="100" value="0" aria-label="achieved percent"></meter>
+{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <input type="hidden" name="source" value="typed" />
@@ -14,6 +17,11 @@
   <input id="total" name="total" value="{{ total }}" />
   <label for="target">Target</label>
   <input id="target" name="target" value="{{ target }}" />
+  <p class="segmented">
+    <button type="button" data-fill-target="0.99">99%</button>
+    <button type="button" data-fill-target="0.999">99.9%</button>
+    <button type="button" data-fill-target="0.9999">99.99%</button>
+  </p>
   <p><button type="submit">Calculate</button></p>
 </form>
 <h2>From my data</h2>

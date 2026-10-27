@@ -43,6 +43,28 @@ def uptime(results: list[CheckResult]) -> float | None:
     return good / len(counted)
 
 
+def hint_for(message: str) -> str:
+    """Return one next step for a stored cause."""
+    text = message.lower()
+    if "gap" in text:
+        return "This followed a quiet period. Confirm your network, then watch the next results."
+    if "connection refused" in text or "connectionerror" in text:
+        return "Check that the program is running and that the port is open."
+    if "timeout" in text:
+        return "Check the path to the site. Raise the timeout only if the site is slow on purpose."
+    if "expected http" in text or "status" in text:
+        return "Open the address and compare the status code with the one you typed."
+    if "keyword" in text:
+        return "The visible text changed. If you meant to change the page, update the keyword."
+    if "hash" in text:
+        return "The page bytes changed. If that was intentional, learn a new baseline."
+    if "certificate" in text or text.startswith("tls"):
+        return "Renew the certificate before the date in the message."
+    if "ping" in text or "heartbeat" in text or "grace" in text:
+        return "Confirm the job is running and that it can reach this PulseGuard address."
+    return "Compare this message with the last check that succeeded."
+
+
 def plain_message(message: str) -> str:
     """Turn a stored result line into a sentence an operator can act on."""
     text = " ".join(message.split())
