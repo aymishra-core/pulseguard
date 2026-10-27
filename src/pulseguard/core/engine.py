@@ -11,7 +11,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
@@ -87,6 +87,7 @@ class Engine:
         """Validate the plan. Nothing runs until ``start``."""
         self._catalog = catalog
         self._catalog_cache: dict[str, tuple[str, ScheduledCheck]] = {}
+        self._agent_sig: tuple[object, ...] | None = None
         if not checks and not catalog:
             raise ConfigValidationError("engine needs at least one monitor")
         self._checks = tuple(checks)
@@ -235,6 +236,19 @@ class Engine:
             return collector.port
         return self._agent_port
 
+    def run_now(self, name: str) -> str:
+        """Run one catalog check on the caller thread and queue the result."""
+        with self._lock:
+            check = self._by_name.get(name)
+        if check is None:
+            raise ConfigValidationError(f"unknown monitor {name!r}")
+        result = check.run()
+        try:
+            self._results.put(result, timeout=2)
+        except Full:
+            raise ConfigValidationError("check queue is full") from None
+        return result.message
+
     def catalog_names(self) -> tuple[str, ...]:
         """Return the monitors the scheduler is currently willing to run."""
         with self._lock:
@@ -270,6 +284,7 @@ class Engine:
 
         checks: tuple[ScheduledCheck, ...] = ()
         edges: dict[str, tuple[str, ...]] = {}
+        agent = (False, "127.0.0.1", 8791, "")
         repo = self._factory()
         try:
             checks, edges = checks_from_catalog(
@@ -278,6 +293,7 @@ class Engine:
                 cache=self._catalog_cache,
             )
             failures, successes = default_thresholds(repo)
+            agent = _agent_settings(repo)
         except Exception:
             LOGGER.warning("catalog reload failed")
             return
@@ -300,6 +316,61 @@ class Engine:
             for name in list(self._next_due):
                 if name not in live:
                     del self._next_due[name]
+        self._sync_agent(agent)
+
+    def _sync_agent(self, chosen: tuple[bool, str, int, str]) -> None:
+        """Start or stop the collector when the saved agent settings change."""
+        if chosen == self._agent_sig:
+            return
+        current = self._collector
+        self._collector = None
+        if current is not None:
+            current.stop(timeout=2)
+        self._agent_sig = chosen
+        enabled, host, port, token = chosen
+        if not enabled or not token:
+            return
+        from pulseguard.agent.server import Collector
+
+        try:
+            self._collector = Collector(
+                host,
+                port,
+                token,
+                self._results,
+                on_result=self._note_agent,
+            )
+            self._collector.start()
+        except Exception:
+            LOGGER.warning("agent collector did not start")
+            self._collector = None
+            self._agent_sig = None
+
+    def _note_agent(self, result: CheckResult) -> None:
+        """Remember when an agent name last sent a result. The token is not stored."""
+        if self._factory is None:
+            return
+        repo = self._factory()
+        try:
+            setter = getattr(repo, "set_setting", None)
+            getter = getattr(repo, "get_setting", None)
+            if not callable(setter) or not callable(getter):
+                return
+            raw = getter("agent_seen")
+            seen: dict[str, str] = {}
+            if isinstance(raw, str) and raw:
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    seen = {str(key): str(value) for key, value in parsed.items()}
+            seen[result.monitor] = result.checked_at.astimezone(UTC).strftime(
+                "%Y-%m-%dT%H:%M:%S+00:00"
+            )
+            setter("agent_seen", json.dumps(seen, sort_keys=True)[:2048])
+        finally:
+            repo.close()
 
     def _store_ping(self, monitor: str, when: datetime) -> None:
         """Persist a heartbeat ping on a connection that is not the writer's."""
@@ -470,6 +541,18 @@ class Engine:
             try:
                 self._notifier.send(_incident_notice(result, action))
                 status = "sent"
+            except AlertError as exc:
+                if str(exc) == "not configured":
+                    status = "not-configured"
+                    error_text = "not configured"
+                else:
+                    status = "failed"
+                    error_text = str(exc)[:500]
+                LOGGER.warning(
+                    "alert delivery failed monitor=%s error=%s",
+                    result.monitor,
+                    type(exc).__name__,
+                )
             except Exception as exc:
                 status = "failed"
                 error_text = type(exc).__name__
@@ -525,6 +608,24 @@ class Engine:
         thread.join(timeout)
         if thread.is_alive():
             raise EngineError(f"{thread.name} did not stop within {timeout:g} seconds")
+
+
+def _agent_settings(repository: Repository) -> tuple[bool, str, int, str]:
+    """Read the collector switch. A missing row means the collector stays off."""
+    getter = getattr(repository, "get_setting", None)
+    if not callable(getter):
+        return False, "127.0.0.1", 8791, ""
+    enabled = getter("agent_enabled") == "1"
+    token = getter("agent_token")
+    host = getter("agent_host")
+    port_text = getter("agent_port")
+    port = int(port_text) if isinstance(port_text, str) and port_text.isdigit() else 8791
+    return (
+        enabled,
+        host if isinstance(host, str) and host else "127.0.0.1",
+        port,
+        token if isinstance(token, str) else "",
+    )
 
 
 def load_plan(

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Incident · PulseGuard{% endblock %}
+{% block body %}
+<h1>{{ row.monitor }}</h1>
+<p><span class="pill {{ row.state }}">{{ row.state }}</span> {{ duration(row.started_at, row.ended_at) }}</p>
+<p>Started {{ row.started_at }}</p>
+<p>Ended {{ row.ended_at or "still open" }}</p>
+<p>Cause {{ row.cause or "this monitor" }}</p>
+<p>{{ row.reason }}</p>
+<p class="note">{{ advice }}</p>
+<p><a class="button" href="{{ url_for('incident_evidence', incident_id=row.id) }}">Download evidence pack</a></p>
+{% if results %}
+<table>
+  <thead><tr><th>Checked</th><th>State</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for item in results %}
+    <tr>
+      <td>{{ item.checked_at }}</td>
+      <td>{% if item.ok %}up{% else %}down{% endif %}</td>
+      <td>{{ item.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No stored results in this window.</p>
+{% endif %}
+{% endblock %}

@@ -42,8 +42,9 @@ from pulseguard.web.forms import monitor_from_payload, parse_enabled, parse_moni
 from pulseguard.web.status import latest_status
 
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
-# A request-body cap. It is a limit, not a measurement.
+# Request-body caps. They are limits, not measurements.
 _MAX_BODY_BYTES = 16_384
+_MAX_UPLOAD_BYTES = 21 * 1024 * 1024
 LOGGER = logging.getLogger("pulseguard.web")
 
 
@@ -76,8 +77,9 @@ def create_app(
     app.config["SECRET_KEY"] = key
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-    app.config["MAX_CONTENT_LENGTH"] = _MAX_BODY_BYTES
+    app.config["MAX_CONTENT_LENGTH"] = _MAX_UPLOAD_BYTES
     app.config["DATABASE"] = str(database)
+    app.config["DATA_DIR"] = str(database.parent)
     app.config["ADMIN_USER"] = user
     app.config["ADMIN_SALT"] = salt
     app.config["ADMIN_DIGEST"] = digest
@@ -136,6 +138,8 @@ def _register(app: Flask) -> None:
     @app.post("/api/monitors")
     @require_api_key
     def create_monitor() -> tuple[Response, int]:
+        if request.content_length is not None and request.content_length > _MAX_BODY_BYTES:
+            return jsonify({"error": "body too large"}), 413
         record = monitor_from_payload(request.get_json(silent=True))
         with _repository() as repo:
             repo.save_monitor(record)

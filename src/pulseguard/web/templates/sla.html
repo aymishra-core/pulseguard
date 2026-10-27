@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}SLA · PulseGuard{% endblock %}
+{% block body %}
+<h1>SLA calculator</h1>
+<p class="help">The target is a number you choose, between 0 and 1. It is not a measurement from this program.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if result %}<p class="result" role="status">{{ result }}</p>{% endif %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <input type="hidden" name="source" value="typed" />
+  <label for="successes">Successes</label>
+  <input id="successes" name="successes" />
+  <label for="total">Total</label>
+  <input id="total" name="total" />
+  <label for="target">Target</label>
+  <input id="target" name="target" value="0.99" />
+  <p><button type="submit">Calculate</button></p>
+</form>
+<h2>From my data</h2>
+{% if not names %}
+<p class="empty">Add a monitor before using stored results.</p>
+{% else %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <input type="hidden" name="source" value="data" />
+  <label for="monitor">Monitor</label>
+  <select id="monitor" name="monitor">
+    {% for name in names %}<option>{{ name }}</option>{% endfor %}
+  </select>
+  <label for="hours">Period</label>
+  <select id="hours" name="hours">
+    <option value="24">24 hours</option>
+    <option value="168">7 days</option>
+    <option value="720">30 days</option>
+  </select>
+  <label for="data-target">Target</label>
+  <input id="data-target" name="target" value="0.99" />
+  <p><button type="submit">Use stored results</button></p>
+</form>
+{% endif %}
+{% endblock %}

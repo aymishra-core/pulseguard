@@ -89,12 +89,9 @@ def register_console(app: Flask) -> None:
         session.clear()
         return redirect(url_for("console_login"))
 
-    @app.get("/dashboard")
-    def dashboard() -> str | RedirectResponse:
-        user = _signed_in()
-        if user is None:
-            return redirect(url_for("console_login"))
-        return render_template("home.html", user=user, csrf_token=ensure_csrf())
+    from pulseguard.web.pages import register_pages
+
+    register_pages(app)
 
 
 def _repository() -> SqliteRepository:

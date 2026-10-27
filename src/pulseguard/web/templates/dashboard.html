@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · PulseGuard{% endblock %}
+{% block body %}
+<section class="summary" aria-label="Summary">
+  <article><h2>Up</h2><p>{{ counts.up }}</p></article>
+  <article><h2>Down</h2><p>{{ counts.down }}</p></article>
+  <article><h2>Unknown</h2><p>{{ counts.unknown }}</p></article>
+  <article><h2>Open incidents</h2><p>{{ open_incidents }}</p></article>
+  <article><h2>Certificates within 30 days</h2><p>{{ certs }}</p></article>
+  <article><h2>24 h uptime</h2><p>{{ uptime }}</p></article>
+</section>
+<p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
+<div class="filters">
+  <label for="filter-kind">Kind</label>
+  <select id="filter-kind">
+    <option value="">All kinds</option>
+    <option>http</option><option>keyword</option><option>defacement</option>
+    <option>tcp</option><option>dns</option><option>tls</option><option>heartbeat</option>
+  </select>
+  <label for="filter-state">State</label>
+  <select id="filter-state">
+    <option value="">All states</option>
+    <option>up</option><option>down</option><option>unknown</option><option>paused</option>
+  </select>
+  <label for="filter-query">Search</label>
+  <input id="filter-query" type="search" placeholder="Name" />
+</div>
+{% if empty %}
+<section class="empty">
+  <h2>No monitors yet</h2>
+  <p>Add one monitor, or load the local lab set.</p>
+  <p>
+    <a class="button" href="{{ url_for('monitor_new') }}">Add your first monitor</a>
+  </p>
+  <form method="post" action="{{ url_for('demo') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button type="submit">Load demo monitors</button>
+  </form>
+</section>
+{% endif %}
+<div class="cards" data-board>
+  {% for card in cards %}
+  <article class="card" data-monitor data-kind="{{ card.kind }}" data-state="{{ card.state }}" data-name="{{ card.name }}">
+    <p class="kind">{{ card.kind }}</p>
+    <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
+    <p><span class="pill {{ card.state }}">{{ card.state }}</span></p>
+    <p>{{ card.message or "no results yet" }}</p>
+    <p class="muted">{{ card.checked or "not checked" }}</p>
+    <p>24 h uptime {{ card.uptime }}</p>
+    {{ card.spark }}
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

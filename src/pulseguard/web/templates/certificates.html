@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Certificates · PulseGuard{% endblock %}
+{% block body %}
+<h1>Certificates</h1>
+<p class="help">ok is more than 30 days, warn is 8–30, critical is 7 or fewer. The word is the signal.</p>
+{% if not rows %}
+<p class="empty">No TLS monitors yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>Monitor</th><th>Days left</th><th>Band</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></td>
+      <td>{{ row.days if row.days is not none else "unknown" }}</td>
+      <td><span class="pill {{ row.band }}">{{ row.band }}</span></td>
+      <td>{{ row.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

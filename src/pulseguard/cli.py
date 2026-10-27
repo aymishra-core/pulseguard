@@ -289,6 +289,7 @@ def _run_serve(args: argparse.Namespace, output: TextIO) -> int:
 
     from waitress import serve
 
+    from pulseguard.notifiers.settings_notifier import DatabaseNotifier
     from pulseguard.storage import SqliteRepository
     from pulseguard.web.app import create_app
 
@@ -317,7 +318,7 @@ def _run_serve(args: argparse.Namespace, output: TextIO) -> int:
         (),
         repository_factory=lambda: SqliteRepository(database),
         catalog=True,
-        notifier=_email_notifier(),
+        notifier=DatabaseNotifier(lambda: SqliteRepository(database)),
     )
     app.config["ENGINE"] = engine
     engine.start()

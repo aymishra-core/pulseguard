@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Edit{% else %}Add{% endif %} monitor · PulseGuard{% endblock %}
+{% block body %}
+<h1>{% if editing %}Edit {{ values.name }}{% else %}Add a monitor{% endif %}</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <label for="kind">Kind</label>
+  <select id="kind" name="kind">
+    {% for kind in kinds %}
+    <option value="{{ kind }}" {% if values.kind == kind %}selected{% endif %}>{{ kind }}</option>
+    {% endfor %}
+  </select>
+  <p class="help">The kind picks which check runs. The fields below change with it.</p>
+  <label for="name">Name</label>
+  <input id="name" name="name" value="{{ values.name or '' }}" {% if editing %}readonly{% endif %} required />
+  <p class="help">1–128 letters, digits, _ or -. Shown on the dashboard.</p>
+  <div data-kinds="http keyword defacement tcp dns tls">
+    <label for="target">Target</label>
+    <input id="target" name="target" value="{{ values.target or '' }}" />
+    <p class="help">URL for HTTP checks, hostname for TCP, DNS, and TLS. Private addresses are allowed unless you turn that off.</p>
+  </div>
+  <div data-kinds="heartbeat">
+    <label for="token">Ping token</label>
+    <input id="token" name="token" value="{{ values.token or '' }}" />
+    <p class="help">Leave blank to generate one. It is the secret in the ping URL.</p>
+    {% if values.token %}
+    <p>Ping URL</p>
+    <code id="ping-url">{{ request.host_url }}ping/{{ values.token }}</code>
+    <button type="button" id="copy-ping" data-copy="curl -fsS '{{ request.host_url }}ping/{{ values.token }}'">Copy curl</button>
+    <p class="help">The curl line uses this server. It is shown only on this page.</p>
+    {% endif %}
+  </div>
+  <label for="interval">Interval (seconds)</label>
+  <input id="interval" name="interval" value="{{ values.interval or 30 }}" />
+  <p class="help">At least 30 seconds.</p>
+  <label for="timeout">Timeout (seconds)</label>
+  <input id="timeout" name="timeout" value="{{ values.timeout or '' }}" />
+  <p class="help">Optional. At most 120 seconds.</p>
+  <div data-kinds="http keyword defacement">
+    <label for="expected_status">Expected status</label>
+    <input id="expected_status" name="expected_status" value="{{ values.expected_status or '' }}" />
+    <p class="help">Blank means 200.</p>
+    <label for="method">Method</label>
+    <input id="method" name="method" value="{{ values.method or '' }}" />
+    <p class="help">GET or HEAD. Redirects are not followed.</p>
+    <label for="retries">Retries</label>
+    <input id="retries" name="retries" value="{{ values.retries or '' }}" />
+    <label for="retry_backoff">Retry backoff (seconds)</label>
+    <input id="retry_backoff" name="retry_backoff" value="{{ values.retry_backoff or '' }}" />
+  </div>
+  <div data-kinds="keyword defacement">
+    <label for="keyword">Keyword</label>
+    <input id="keyword" name="keyword" value="{{ values.keyword or '' }}" />
+    <p class="help">Matched against visible text. script and style tags are ignored.</p>
+    <label for="max_body_bytes">Max body bytes</label>
+    <input id="max_body_bytes" name="max_body_bytes" value="{{ values.max_body_bytes or '' }}" />
+  </div>
+  <div data-kinds="defacement">
+    <label for="expected_sha256">Expected SHA-256</label>
+    <input id="expected_sha256" name="expected_sha256" value="{{ values.expected_sha256 or '' }}" />
+    <p class="help">64 hex characters. The hash is of the raw response bytes.</p>
+    <label for="alert_after">Alert after</label>
+    <input id="alert_after" name="alert_after" value="{{ values.alert_after or '' }}" />
+    <p class="help">How many mismatches before the result is critical. 1–20.</p>
+  </div>
+  <div data-kinds="tcp tls">
+    <label for="port">Port</label>
+    <input id="port" name="port" value="{{ values.port or '' }}" />
+    <p class="help">1–65535.</p>
+  </div>
+  <div data-kinds="dns">
+    <label for="expected">Expected addresses</label>
+    <input id="expected" name="expected" value="{{ values.expected or '' }}" />
+    <p class="help">Comma-separated IP addresses. 1–8.</p>
+  </div>
+  <div data-kinds="heartbeat">
+    <label for="grace_seconds">Grace (seconds)</label>
+    <input id="grace_seconds" name="grace_seconds" value="{{ values.grace_seconds or '' }}" />
+    <p class="help">How long a ping stays fresh. 30–604800. Blank means 120.</p>
+  </div>
+  <div data-kinds="http keyword defacement tcp dns tls">
+    <label><input type="checkbox" name="allow_private" value="1" {% if values.allow_private != false %}checked{% endif %} /> Allow private and loopback targets</label>
+    <p class="help">Turn this off to reject localhost and private addresses. Names are not resolved during the check of that rule.</p>
+  </div>
+  <label for="depends_on">Depends on</label>
+  <select id="depends_on" name="depends_on" multiple>
+    {% for other in others %}
+    <option value="{{ other }}" {% if values.depends_on and other in values.depends_on %}selected{% endif %}>{{ other }}</option>
+    {% endfor %}
+  </select>
+  <p class="help">While a selected monitor is down, a failure here does not open a new incident.</p>
+  <label><input type="checkbox" name="enabled" value="1" {% if values.enabled != false %}checked{% endif %} /> Enabled</label>
+  <p><button type="submit">Save</button></p>
+</form>
+{% if editing %}
+<form method="post" action="{{ url_for('monitor_check', name=values.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">Run check now</button>
+</form>
+<form method="post" action="{{ url_for('monitor_pause', name=values.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">{% if values.enabled == false %}Resume{% else %}Pause{% endif %}</button>
+</form>
+<form method="post" action="{{ url_for('monitor_duplicate', name=values.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">Duplicate</button>
+</form>
+<form method="post" action="{{ url_for('monitor_delete', name=values.name) }}" onsubmit="return confirm('Delete this monitor?')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">Delete</button>
+</form>
+{% endif %}
+{% endblock %}

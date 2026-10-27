@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ record.name }} · PulseGuard{% endblock %}
+{% block body %}
+<h1>{{ record.name }}</h1>
+<p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }}</p>
+<p>{{ message or "no results yet" }}</p>
+{% if record.kind != "heartbeat" %}<p>Target {{ record.target }}</p>{% endif %}
+{% if ping %}
+<p><code>{{ ping }}</code></p>
+<button type="button" data-copy="{{ ping }}">Copy curl</button>
+{% endif %}
+<section class="summary">
+  <article><h2>24 h</h2><p>{{ uptime_24 }}</p></article>
+  <article><h2>7 d</h2><p>{{ uptime_7 }}</p></article>
+  <article><h2>30 d</h2><p>{{ uptime_30 }}</p></article>
+</section>
+{{ chart }}
+{% if results %}
+<table>
+  <thead><tr><th>Checked</th><th>State</th><th>Latency</th><th>Message</th></tr></thead>
+  <tbody>
+    {% for row in results %}
+    <tr>
+      <td>{{ row.checked_at }}</td>
+      <td>{% if row.ok %}up{% else %}down{% endif %}</td>
+      <td>{{ row.latency_ms }} ms</td>
+      <td>{{ row.message }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No results yet.</p>
+{% endif %}
+<h2>Incidents</h2>
+{% if incidents %}
+<ul>
+  {% for row in incidents %}
+  <li><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.state }} {{ row.started_at }}</a> {{ row.reason }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">No incidents for this monitor.</p>
+{% endif %}
+<p>
+  <a class="button" href="{{ url_for('monitor_edit', name=record.name) }}">Edit</a>
+</p>
+<form method="post" action="{{ url_for('monitor_pause', name=record.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">{% if record.enabled %}Pause{% else %}Resume{% endif %}</button>
+</form>
+<form method="post" action="{{ url_for('monitor_check', name=record.name) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+  <button type="submit">Run check now</button>
+</form>
+{% endblock %}

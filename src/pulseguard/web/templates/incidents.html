@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Incidents · PulseGuard{% endblock %}
+{% block body %}
+<h1>Incidents</h1>
+<p class="note">{{ advice }}</p>
+<p>
+  <a href="{{ url_for('incident_list', tab='open') }}">Open</a>
+  <a href="{{ url_for('incident_list', tab='resolved') }}">Resolved</a>
+</p>
+{% if not rows %}
+<p class="empty">No {{ tab }} incidents.</p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Monitor</th><th>Started</th><th>Ended</th><th>Duration</th><th>Cause</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.monitor }}</a></td>
+      <td>{{ row.started_at }}</td>
+      <td>{{ row.ended_at or "—" }}</td>
+      <td>{{ duration(row.started_at, row.ended_at) }}</td>
+      <td>{{ row.cause or row.reason }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

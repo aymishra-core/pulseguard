@@ -239,6 +239,13 @@ class SqlRepository(Repository):
         )
         return [monitor_from_row(row) for row in rows]
 
+    def delete_monitor_details(self, name: str) -> None:
+        """Drop options and the stored ping for one monitor. Results stay."""
+        chosen = require_monitor_name(name)
+        self._change(f"DELETE FROM monitor_options WHERE name = {self._mark}", (chosen,))
+        self._change(f"DELETE FROM heartbeat_pings WHERE monitor = {self._mark}", (chosen,))
+        self._commit_if_needed()
+
     def delete_monitor(self, name: str) -> bool:
         """Delete a catalog row and leave its results stored."""
         chosen = require_monitor_name(name)

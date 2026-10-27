@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}PulseGuard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav" aria-label="Sections">
+        <a class="brand" href="{{ url_for('dashboard') }}">PulseGuard</a>
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('monitor_list') }}">Monitors</a>
+        <a href="{{ url_for('incident_list') }}">Incidents</a>
+        <a href="{{ url_for('certificates') }}">Certificates</a>
+        <a href="{{ url_for('alerts') }}">Alerts</a>
+        <a href="{{ url_for('sla') }}">SLA</a>
+        <a href="{{ url_for('agents') }}">Agents</a>
+        <a href="{{ url_for('data_page') }}">Data</a>
+        <a href="{{ url_for('settings') }}">Settings</a>
+        <a href="{{ url_for('help_page') }}">Help</a>
+        <a href="{{ url_for('public_status') }}">Public status</a>
+      </nav>
+      <div class="main">
+        <header class="top">
+          <p class="who">Signed in as <strong>{{ user }}</strong></p>
+          <p class="dot-row"><span class="pill {{ dot }}">{{ dot }}</span> overall</p>
+          <form method="post" action="{{ url_for('console_logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit">Log out</button>
+          </form>
+        </header>
+        {% if flash %}
+        <p class="toast {{ flash_level }}" role="status">{{ flash }}</p>
+        {% endif %}
+        <main>
+          {% block body %}{% endblock %}
+        </main>
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

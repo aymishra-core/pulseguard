@@ -40,6 +40,7 @@ pulseguard = [
     "storage/schema.sql",
     "web/templates/*.html",
     "web/static/*.css",
+    "web/static/*.js",
 ]
 
 [tool.pytest.ini_options]

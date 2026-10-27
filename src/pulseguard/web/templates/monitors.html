@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Monitors · PulseGuard{% endblock %}
+{% block body %}
+<p><a class="button" href="{{ url_for('monitor_new') }}">Add monitor</a></p>
+{% if not rows %}
+<p class="empty">No monitors yet. Add one to start checking.</p>
+{% else %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Kind</th><th>State</th><th>Target</th><th>Interval</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></td>
+      <td>{{ row.kind }}</td>
+      <td><span class="pill {{ row.state }}">{{ row.state }}</span></td>
+      <td>{{ row.target }}</td>
+      <td>{{ row.interval }}s</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
