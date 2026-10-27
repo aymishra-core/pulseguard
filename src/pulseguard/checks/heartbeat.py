@@ -32,9 +32,9 @@ Clock = Callable[[], datetime]
 class HeartbeatCheck(BaseCheck):
     """Dead-man's switch. ``target`` is the unguessable token, not a URL.
 
-    ``record_ping`` is what the later ``/ping/<token>`` route will call.
-    ``run`` compares that timestamp with ``grace_seconds``. The token is never
-    copied into the result message.
+    ``record_ping`` is what ``/ping/<token>`` calls. ``pulseguard web`` keeps
+    this object in the same process as the scheduler. ``run`` compares that
+    timestamp with ``grace_seconds``. The token is never copied into the result.
     """
 
     kind: ClassVar[str] = "heartbeat"

@@ -1,0 +1,23 @@
+body {
+  font-family: sans-serif;
+  margin: 2rem;
+  color: #1a1a1a;
+  background: #f7f7f5;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #fff;
+}
+
+th,
+td {
+  border: 1px solid #ccc;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.note {
+  max-width: 40rem;
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PulseGuard status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
+  </head>
+  <body>
+    <p class="note">
+      This page reads stored results. It does not contact the monitored targets.
+    </p>
+    <p><a href="{{ url_for('login_form') }}">Admin</a></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Monitor</th>
+          <th>Kind</th>
+          <th>State</th>
+          <th>Message</th>
+          <th>Checked</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ row.kind }}</td>
+          <td>{% if row.ok is none %}unknown{% elif row.ok %}up{% else %}down{% endif %}</td>
+          <td>{{ row.message }}</td>
+          <td>{{ row.checked_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>

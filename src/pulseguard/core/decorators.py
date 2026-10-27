@@ -2,7 +2,7 @@
 
 ``retry`` demonstrates a decorator and a closure that updates ``remaining``
 with ``nonlocal``. ``timed`` and ``log_call`` decorate the check entrypoint.
-``require_api_key`` is deferred until the write API exists.
+``require_api_key`` for the write API lives in ``pulseguard.web.auth``.
 """
 
 from __future__ import annotations

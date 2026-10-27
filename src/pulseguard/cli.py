@@ -56,6 +56,10 @@ def main(argv: Sequence[str] | None = None, *, stdout: TextIO | None = None) -> 
             return _run_backup(args, output)
         if args.command == "push":
             return _run_push(args, output)
+        if args.command == "web":
+            return _run_web(args, output)
+        if args.command == "console":
+            return _run_console(args)
         raise ConfigValidationError(f"unknown command {args.command}")
     except ConfigValidationError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -79,6 +83,8 @@ def _parser() -> argparse.ArgumentParser:
     _add_import(sub)
     _add_backup(sub)
     _add_push(sub)
+    _add_web(sub)
+    _add_console(sub)
     return parser
 
 
@@ -165,6 +171,23 @@ def _add_backup(sub: Any) -> None:
     _add_log_args(backup)
 
 
+def _add_web(sub: Any) -> None:
+    """Add ``web``. It serves status and runs the scheduler in this process."""
+    web = sub.add_parser("web", help="serve the status page and run checks")
+    web.add_argument("--config", type=Path, required=True, help="JSON file with a monitors list")
+    web.add_argument("--db", type=Path, required=True, help="SQLite file")
+    web.add_argument("--host", default="127.0.0.1", help="listen address")
+    web.add_argument("--port", type=int, default=8080, help="listen port")
+    _add_log_args(web)
+
+
+def _add_console(sub: Any) -> None:
+    """Add ``console``. It opens the desktop window."""
+    console = sub.add_parser("console", help="open the desktop status window")
+    console.add_argument("--db", type=Path, required=True, help="SQLite file")
+    _add_log_args(console)
+
+
 def _add_log_args(parser: argparse.ArgumentParser) -> None:
     """Add the shared logging flags."""
     parser.add_argument("--log-dir", type=Path, help="write a rotating log file here")
@@ -180,6 +203,78 @@ def _configure_logging(args: argparse.Namespace) -> None:
         setup_logging(level=str(level), log_dir=args.log_dir)
     except ValueError as exc:
         raise ConfigValidationError(str(exc)) from exc
+
+
+def _run_web(args: argparse.Namespace, output: TextIO) -> int:
+    """Serve the site and run checks until the process is interrupted."""
+    host = require_agent_host(args.host)
+    port = require_agent_port(args.port, allow_ephemeral=False)
+    secret, user, password, api_key = _web_secrets()
+    from waitress import serve
+
+    from pulseguard.checks.heartbeat import HeartbeatCheck
+    from pulseguard.web.app import create_app
+
+    checks, edges, settings = load_plan(args.config)
+    heartbeats = [check for check in checks if isinstance(check, HeartbeatCheck)]
+    database = args.db
+    app = create_app(
+        database=database,
+        secret_key=secret,
+        admin_user=user,
+        admin_password=password,
+        api_key=api_key,
+        heartbeats=heartbeats,
+    )
+    del password
+    engine = Engine(
+        checks,
+        repository_factory=lambda: SqliteRepository(database),
+        dependencies=edges,
+        workers=settings["workers"],
+        queue_size=settings["queue_size"],
+        host_limit=settings["host_limit"],
+        failures_before_open=settings["failures_before_open"],
+        successes_before_resolve=settings["successes_before_resolve"],
+        notifier=_email_notifier(),
+    )
+    engine.start()
+    output.write(f"web http://{host}:{port}\n")
+    output.flush()
+    try:
+        serve(app, host=host, port=port, threads=4)
+    except KeyboardInterrupt:
+        pass
+    except OSError as exc:
+        raise ConfigValidationError("web server could not listen") from exc
+    finally:
+        engine.stop()
+    return 0
+
+
+def _web_secrets() -> tuple[str, str, str, str]:
+    """Read the web secrets from the environment. They are not printed."""
+    from pulseguard.web.auth import (
+        require_admin_password,
+        require_admin_user,
+        require_api_key_value,
+        require_secret_key,
+    )
+
+    return (
+        require_secret_key(os.environ.get("PULSEGUARD_SECRET_KEY", "")),
+        require_admin_user(os.environ.get("PULSEGUARD_ADMIN_USER", "")),
+        require_admin_password(os.environ.get("PULSEGUARD_ADMIN_PASSWORD", "")),
+        require_api_key_value(os.environ.get("PULSEGUARD_API_KEY", "")),
+    )
+
+
+def _run_console(args: argparse.Namespace) -> int:
+    """Open the desktop window. Widgets stay on the main thread."""
+    from pulseguard.gui.widgets import launch_console
+
+    launch_console(args.db)
+    return 0
 
 
 def _run_check(args: argparse.Namespace, output: TextIO) -> int:

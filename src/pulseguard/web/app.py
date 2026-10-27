@@ -1,0 +1,194 @@
+"""Flask application. The public pages read stored rows and do not fetch URLs."""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections.abc import Sequence
+from pathlib import Path
+
+from flask import (
+    Flask,
+    Response,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.wrappers import Response as RedirectResponse
+
+from pulseguard.checks.heartbeat import HeartbeatCheck
+from pulseguard.exceptions import ConfigValidationError, PulseGuardError
+from pulseguard.storage import SqliteRepository
+from pulseguard.web.auth import (
+    csrf_ok,
+    ensure_csrf,
+    hash_password,
+    login_ok,
+    login_required,
+    require_admin_password,
+    require_admin_user,
+    require_api_key,
+    require_api_key_value,
+    require_secret_key,
+)
+from pulseguard.web.forms import monitor_from_payload, parse_enabled, parse_monitor_name
+from pulseguard.web.status import latest_status
+
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+# A request-body cap. It is a limit, not a measurement.
+_MAX_BODY_BYTES = 16_384
+LOGGER = logging.getLogger("pulseguard.web")
+
+
+def create_app(
+    *,
+    database: Path,
+    secret_key: str,
+    admin_user: str,
+    admin_password: str,
+    api_key: str,
+    heartbeats: Sequence[HeartbeatCheck] = (),
+) -> Flask:
+    """Build the app. The password is hashed before it is discarded."""
+    key = require_secret_key(secret_key)
+    user = require_admin_user(admin_user)
+    password = require_admin_password(admin_password)
+    token = require_api_key_value(api_key)
+    salt, digest = hash_password(password)
+    del password
+    app = Flask(
+        __name__,
+        template_folder=str(Path(__file__).with_name("templates")),
+        static_folder=str(Path(__file__).with_name("static")),
+    )
+    app.config["SECRET_KEY"] = key
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["MAX_CONTENT_LENGTH"] = _MAX_BODY_BYTES
+    app.config["DATABASE"] = str(database)
+    app.config["ADMIN_USER"] = user
+    app.config["ADMIN_SALT"] = salt
+    app.config["ADMIN_DIGEST"] = digest
+    app.config["API_KEY"] = token
+    app.config["HEARTBEATS"] = _index_heartbeats(heartbeats)
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    _register(app)
+    return app
+
+
+def _register(app: Flask) -> None:
+    """Attach routes. Access logs stay off so a ping token is not written out."""
+
+    @app.after_request
+    def _headers(response: Response) -> Response:
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.errorhandler(PulseGuardError)
+    def _failure(exc: PulseGuardError) -> tuple[Response | str, int]:
+        if request.path.startswith("/api/"):
+            return jsonify({"error": str(exc)}), 400
+        return str(exc), 400
+
+    @app.get("/")
+    def status_page() -> str:
+        monitor = request.args.get("monitor")
+        with _repository() as repo:
+            rows = latest_status(repo, monitor=monitor)
+        return render_template("status.html", rows=rows)
+
+    @app.get("/api/status")
+    def status_json() -> Response:
+        monitor = request.args.get("monitor")
+        with _repository() as repo:
+            rows = latest_status(repo, monitor=monitor)
+        body = {
+            "note": "stored results only",
+            "monitors": [row.as_public() for row in rows],
+        }
+        return jsonify(body)
+
+    @app.post("/api/monitors")
+    @require_api_key
+    def create_monitor() -> tuple[Response, int]:
+        record = monitor_from_payload(request.get_json(silent=True))
+        with _repository() as repo:
+            repo.save_monitor(record)
+        return jsonify({"name": record.name, "enabled": record.enabled}), 201
+
+    @app.route("/ping/<token>", methods=["GET", "POST"])
+    def ping(token: str) -> tuple[str, int]:
+        book: dict[str, HeartbeatCheck] = app.config["HEARTBEATS"]
+        check = book.get(token) if _TOKEN_RE.fullmatch(token) else None
+        if check is None:
+            LOGGER.info("heartbeat ping rejected")
+            return "not found", 404
+        check.record_ping()
+        if check.name == check.token:
+            LOGGER.info("heartbeat ping accepted")
+        else:
+            LOGGER.info("heartbeat ping accepted monitor=%s", check.name)
+        return "ok", 200
+
+    @app.get("/admin/login")
+    def login_form() -> str:
+        return render_template("login.html", csrf_token=ensure_csrf(), failed=False)
+
+    @app.post("/admin/login")
+    def login_submit() -> RedirectResponse | tuple[str, int]:
+        if not csrf_ok():
+            return "csrf token rejected", 400
+        if not login_ok(request.form.get("username"), request.form.get("password")):
+            LOGGER.info("admin login failed")
+            return render_template("login.html", csrf_token=ensure_csrf(), failed=True), 401
+        session["user"] = app.config["ADMIN_USER"]
+        LOGGER.info("admin login succeeded")
+        return redirect(url_for("admin_page"))
+
+    @app.post("/admin/logout")
+    def logout() -> RedirectResponse | tuple[str, int]:
+        if not csrf_ok():
+            return "csrf token rejected", 400
+        session.clear()
+        return redirect(url_for("login_form"))
+
+    @app.get("/admin")
+    @login_required
+    def admin_page() -> str:
+        with _repository() as repo:
+            records = repo.monitors()
+        return render_template("admin.html", monitors=records, csrf_token=ensure_csrf())
+
+    @app.post("/admin/monitors")
+    @login_required
+    def admin_update() -> RedirectResponse | tuple[str, int]:
+        if not csrf_ok():
+            return "csrf token rejected", 400
+        name = parse_monitor_name(request.form.get("name"))
+        enabled = parse_enabled(request.form.get("enabled"))
+        with _repository() as repo:
+            repo.update_monitor(name, enabled=enabled)
+        return redirect(url_for("admin_page"))
+
+
+def _repository() -> SqliteRepository:
+    """Open a connection for this request. The caller closes it."""
+    return SqliteRepository(Path(str(current_app.config["DATABASE"])))
+
+
+def _index_heartbeats(checks: Sequence[HeartbeatCheck]) -> dict[str, HeartbeatCheck]:
+    """Index ping targets by token. The token is the dict key, not a log field."""
+    found: dict[str, HeartbeatCheck] = {}
+    for check in checks:
+        if not isinstance(check, HeartbeatCheck):
+            raise ConfigValidationError("ping book only accepts heartbeat checks")
+        if check.token in found:
+            raise ConfigValidationError("heartbeat tokens must be unique")
+        found[check.token] = check
+    return found

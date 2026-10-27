@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PulseGuard admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
+  </head>
+  <body>
+    <h1>Admin</h1>
+    <p class="note">Catalog targets stay on this page. The public status page does not show them.</p>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <button type="submit">Log out</button>
+    </form>
+    {% if not monitors %}
+    <p>no monitors in the catalog</p>
+    {% endif %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Kind</th>
+          <th>Target</th>
+          <th>Interval</th>
+          <th>Enabled</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in monitors %}
+        <tr>
+          <td>{{ record.name }}</td>
+          <td>{{ record.kind }}</td>
+          <td>{{ record.target }}</td>
+          <td>{{ record.interval_seconds }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_update') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <input type="hidden" name="name" value="{{ record.name }}" />
+              <select name="enabled">
+                <option value="true" {% if record.enabled %}selected{% endif %}>true</option>
+                <option value="false" {% if not record.enabled %}selected{% endif %}>false</option>
+              </select>
+              <button type="submit">Save</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
