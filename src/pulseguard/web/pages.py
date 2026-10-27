@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import secrets
 import zipfile
 from datetime import UTC, datetime
@@ -53,11 +54,14 @@ from pulseguard.web.auth import (
     require_api_key_value,
 )
 from pulseguard.web.board import (
+    activity_lines,
     certificate_band,
     days_remaining,
     latency_chart,
     latest_by_name,
     monitor_state,
+    plain_message,
+    segments,
     sparkline,
     uptime,
     window,
@@ -90,6 +94,14 @@ def register_pages(app: Flask) -> None:
         with _repository() as repo:
             body = _dashboard_body(repo)
         return jsonify(_json_ready(body))
+
+    @app.get("/api/activity")
+    def activity_json() -> tuple[Response, int] | Response:
+        if _signed_in() is None:
+            return jsonify({"error": "login required"}), 401
+        with _repository() as repo:
+            events = activity_lines(list(repo.iter_results(None)))
+        return jsonify({"events": events})
 
     @app.get("/monitors")
     def monitor_list() -> str | RedirectResponse | tuple[str, int]:
@@ -131,17 +143,24 @@ def register_pages(app: Flask) -> None:
         latest = results[-1] if results else None
         latencies = [row.latency_ms for row in results[-100:]]
         now = utc_now()
+        today = [row for row in results if row.checked_at.date() == now.date()]
         return _page(
             "monitor_detail.html",
             record=record,
             state=monitor_state(record, latest),
             message="" if latest is None else latest.message,
+            plain=plain_message(latest.message) if latest is not None else "No results yet.",
             chart=latency_chart(latencies),
             results=list(reversed(results[-20:])),
             incidents=incidents,
             uptime_24=_pct(uptime(window(results, now, 24))),
             uptime_7=_pct(uptime(window(results, now, 24 * 7))),
             uptime_30=_pct(uptime(window(results, now, 24 * 30))),
+            average=_latency_text(latencies, 0.5),
+            p95=_latency_text(latencies, 0.95),
+            checks_today=len(today),
+            state_for=_state_span(results, now),
+            bar=segments(results, now),
             ping=_ping_line(record, options),
         )
 
@@ -803,28 +822,40 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
             remaining = days_remaining(result.message, now)
             if remaining is not None and remaining <= 30:
                 certs += 1
+        checked_at = None if result is None else result.checked_at
+        raw = "" if result is None else result.message
         cards.append(
             {
                 "name": record.name,
                 "kind": record.kind,
                 "state": state,
-                "message": "" if result is None else result.message,
-                "checked": ""
-                if result is None
-                else result.checked_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "message": raw,
+                "plain": plain_message(raw)
+                if raw
+                else "No results yet. The first check has not run.",
+                "checked": "" if checked_at is None else checked_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "checked_at": "" if checked_at is None else checked_at.isoformat(),
+                "interval": record.interval_seconds,
                 "uptime": _pct(uptime(recent)),
                 "spark": sparkline([item.latency_ms for item in mine]),
-                "points": [item.latency_ms for item in mine[-20:]],
+                "points": [round(item.latency_ms) for item in mine[-20:]],
+                "segments": segments(mine, now),
             }
         )
     day = window(results, now, 24)
+    open_rows = repo.incidents(state="open")
+    since = ""
+    if open_rows:
+        since = min(row.started_at for row in open_rows)
     return {
         "cards": cards,
         "counts": counts,
-        "open_incidents": len(repo.incidents(state="open")),
+        "open_incidents": len(open_rows),
+        "incident_since": since,
         "certs": certs,
         "uptime": _pct(uptime(day)),
         "empty": not records,
+        "activity": activity_lines(results),
     }
 
 
@@ -838,8 +869,10 @@ def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
     return {
         "counts": body["counts"],
         "open_incidents": body["open_incidents"],
+        "incident_since": body.get("incident_since", ""),
         "certs": body["certs"],
         "uptime": body["uptime"],
+        "activity": body.get("activity", []),
         "monitors": cards,
     }
 
@@ -1227,6 +1260,39 @@ def _inside(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _latency_text(values: list[float], quantile: float) -> str:
+    """Return one latency quantile rounded to a whole millisecond."""
+    clean = sorted(value for value in values if value >= 0)
+    if not clean:
+        return "—"
+    if quantile <= 0.5:
+        chosen = sum(clean) / len(clean)
+    else:
+        index = min(len(clean) - 1, max(0, math.ceil(quantile * len(clean)) - 1))
+        chosen = clean[index]
+    return f"{round(chosen)} ms"
+
+
+def _state_span(results: list[Any], now: datetime) -> str:
+    """Return how long the current up or down run has lasted."""
+    if not results:
+        return "not checked yet"
+    latest = results[-1]
+    if latest.message == "monitoring gap":
+        return "no data in the latest window"
+    start = latest.checked_at
+    for item in reversed(results):
+        if item.message == "monitoring gap" or item.ok != latest.ok:
+            break
+        start = item.checked_at
+    seconds = max(0, int((now - start).total_seconds()))
+    minutes, _sec = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    clock = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+    word = "up" if latest.ok else "down"
+    return f"{word} for {clock}"
 
 
 def _pct(value: float | None) -> str:

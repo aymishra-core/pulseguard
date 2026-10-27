@@ -21,6 +21,7 @@ from pulseguard.checks import build_check
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.core.context import HostLimiter, Timer
 from pulseguard.core.dependencies import dependency_edges, flatten_monitors, root_cause
+from pulseguard.core.gaps import AFTER_GAP_MESSAGE, GAP_MESSAGE, exceeds_gap, gap_moment
 from pulseguard.core.incidents import (
     DEFAULT_FAILURES_BEFORE_OPEN,
     DEFAULT_SUCCESSES_BEFORE_RESOLVE,
@@ -512,8 +513,9 @@ class Engine:
             self._down.discard(result.monitor)
         else:
             self._down.add(result.monitor)
+        result, counts = self._annotate_gap(result, repository)
         suppressed = cause is not None and not result.ok
-        action = self.incidents.observe(result, suppressed=suppressed)
+        action = self.incidents.observe(result, suppressed=suppressed, counts=counts)
         if repository is not None and action == "open":
             opener = getattr(repository, "open_incident", None)
             if callable(opener):
@@ -527,6 +529,57 @@ class Engine:
             repository.add_result(result)
         with self._lock:
             self._stored += 1
+
+    def _interval_for(self, name: str) -> float:
+        """Return the scheduled interval, or 30 seconds when the monitor is new."""
+        with self._lock:
+            check = self._by_name.get(name)
+        if check is None:
+            return 30.0
+        return float(check.interval)
+
+    def _annotate_gap(
+        self, result: CheckResult, repository: Repository | None
+    ) -> tuple[CheckResult, bool]:
+        """Store a gap row and keep the first failure after it off the incident streak."""
+        if repository is None:
+            return result, True
+        reader = getattr(repository, "results_for", None)
+        if not callable(reader):
+            return result, True
+        rows = reader(result.monitor)
+        if not rows:
+            return result, True
+        previous = rows[-1]
+        interval = self._interval_for(result.monitor)
+        if not exceeds_gap(previous.checked_at, result.checked_at, interval):
+            return result, True
+        repository.add_result(
+            CheckResult(
+                monitor=result.monitor,
+                kind=result.kind,
+                ok=True,
+                latency_ms=0,
+                message=GAP_MESSAGE,
+                severity=Severity.INFO,
+                checked_at=gap_moment(previous.checked_at, interval),
+            )
+        )
+        if result.ok:
+            return result, True
+        return (
+            CheckResult(
+                monitor=result.monitor,
+                kind=result.kind,
+                ok=False,
+                latency_ms=result.latency_ms,
+                message=AFTER_GAP_MESSAGE,
+                severity=result.severity,
+                checked_at=result.checked_at,
+                status_code=result.status_code,
+            ),
+            False,
+        )
 
     def _alert(
         self,

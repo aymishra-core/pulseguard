@@ -215,7 +215,6 @@
 
   var board = document.querySelector("[data-board]");
   var label = document.querySelector("[data-updated]");
-  if (!board || !label) return;
   var at = Date.now();
 
   function spark(points) {
@@ -240,6 +239,65 @@
     return svg;
   }
 
+  function localTime(value) {
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    var seconds = Math.round((Date.now() - date.getTime()) / 1000);
+    var text = date.toLocaleString();
+    if (seconds < 60) return seconds + " s ago";
+    if (seconds < 3600) return Math.round(seconds / 60) + " m ago";
+    if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
+    return text;
+  }
+  function paintTimes() {
+    document.querySelectorAll("time[datetime]").forEach(function (node) {
+      var exact = new Date(node.getAttribute("datetime"));
+      if (Number.isNaN(exact.getTime())) return;
+      node.textContent = localTime(node.getAttribute("datetime"));
+      node.setAttribute("title", exact.toLocaleString());
+    });
+    var zone = document.querySelector("#zone");
+    if (zone) {
+      var name = "";
+      try { name = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (err) { name = ""; }
+      zone.textContent = "Times are shown in " + (name || "your local time zone") + ".";
+    }
+    document.querySelectorAll("[data-checked]").forEach(function (card) {
+      var label = card.querySelector(".next-check");
+      var stamp = card.getAttribute("data-checked");
+      var interval = Number(card.getAttribute("data-interval") || "30");
+      if (!label || !stamp) return;
+      var age = (Date.now() - new Date(stamp).getTime()) / 1000;
+      var left = Math.max(0, Math.round(interval - age));
+      label.textContent = left ? "Next check in " + left + " s" : "Check due";
+    });
+  }
+  paintTimes();
+  setInterval(paintTimes, 1000);
+  document.addEventListener("click", function (event) {
+    var opener = event.target.closest("[data-open]");
+    if (opener) {
+      var dialog = document.getElementById(opener.getAttribute("data-open"));
+      if (dialog && dialog.showModal) dialog.showModal();
+    }
+    var closer = event.target.closest("[data-close]");
+    if (closer) {
+      var box = closer.closest("dialog");
+      if (box && box.close) box.close();
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      document.querySelectorAll("dialog[open]").forEach(function (dialog) { dialog.close(); });
+    }
+  });
+  var sort = document.querySelector("#filter-sort");
+  if (sort && readStore("pulseguard-sort")) sort.value = readStore("pulseguard-sort");
+  if (filters && readStore("pulseguard-kind")) {
+    var kindFilter = document.querySelector("#filter-kind");
+    if (kindFilter) kindFilter.value = readStore("pulseguard-kind");
+  }
+
   function paint(body) {
     var counts = body.counts || {};
     document.querySelectorAll(".summary article").forEach(function (article) {
@@ -262,6 +320,8 @@
       card.setAttribute("data-kind", monitor.kind);
       card.setAttribute("data-state", monitor.state);
       card.setAttribute("data-name", monitor.name);
+      card.setAttribute("data-interval", String(monitor.interval || 30));
+      card.setAttribute("data-checked", monitor.checked_at || "");
       var kindText = document.createElement("p");
       kindText.className = "kind";
       kindText.textContent = monitor.kind;
@@ -276,10 +336,17 @@
       pill.textContent = monitor.state;
       pillRow.appendChild(pill);
       var message = document.createElement("p");
-      message.textContent = monitor.message || "no results yet";
+      message.textContent = monitor.plain || monitor.message || "no results yet";
       var checked = document.createElement("p");
       checked.className = "muted";
-      checked.textContent = monitor.checked || "not checked";
+      var time = document.createElement("time");
+      if (monitor.checked_at) {
+        time.setAttribute("datetime", monitor.checked_at);
+        time.textContent = monitor.checked || "not checked";
+      } else {
+        time.textContent = "not checked";
+      }
+      checked.appendChild(time);
       var uptime = document.createElement("p");
       uptime.textContent = "24 h uptime " + monitor.uptime;
       card.appendChild(kindText);
@@ -292,7 +359,31 @@
       if (drawn) card.appendChild(drawn);
       board.appendChild(card);
     });
+    var feed = document.querySelector("#activity");
+    if (feed && body.activity) {
+      feed.textContent = "";
+      if (!body.activity.length) {
+        var empty = document.createElement("li");
+        empty.textContent = "No changes yet.";
+        feed.appendChild(empty);
+      }
+      body.activity.forEach(function (event) {
+        var item = document.createElement("li");
+        var mark = document.createElement("span");
+        mark.className = "pill " + event.state;
+        mark.textContent = event.state;
+        var when = document.createElement("time");
+        when.setAttribute("datetime", event.at);
+        when.textContent = event.at;
+        item.appendChild(mark);
+        item.appendChild(document.createTextNode(" "));
+        item.appendChild(when);
+        item.appendChild(document.createTextNode(" " + event.text));
+        feed.appendChild(item);
+      });
+    }
     applyFilter();
+    paintTimes();
   }
 
   function pull() {
@@ -306,9 +397,11 @@
     });
   }
 
-  setInterval(pull, 5000);
-  setInterval(function () {
-    var seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-    label.textContent = "updated " + seconds + " s ago";
-  }, 1000);
+  if (board && label) {
+    setInterval(pull, 5000);
+    setInterval(function () {
+      var seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+      label.textContent = "updated " + seconds + " s ago";
+    }, 1000);
+  }
 })();

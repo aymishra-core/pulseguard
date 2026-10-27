@@ -1,10 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ record.name }} · PulseGuard{% endblock %}
+{% block crumb %}{{ record.name }}{% endblock %}
 {% block body %}
-<h1>{{ record.name }}</h1>
-<p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }}</p>
-<p>{{ message or "no results yet" }}</p>
-{% if record.kind != "heartbeat" %}<p>Target {{ record.target }}</p>{% endif %}
+<header class="hero">
+  <div class="ring {{ state }}" aria-hidden="true"></div>
+  <div>
+    <h1>{{ record.name }}</h1>
+    <p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }} · {{ state_for }}</p>
+    <p>{{ plain }}</p>
+    {% if record.kind != "heartbeat" %}<p>Target {{ record.target }}</p>{% endif %}
+  </div>
+</header>
+<p class="muted" id="zone">Times are stored in UTC and shown in your local time zone.</p>
 {% if record.kind == "heartbeat" %}
 <p>PulseGuard address</p>
 <p><code>{{ request.host_url.rstrip('/') }}</code>
@@ -15,22 +22,56 @@
 <p>Ping URL</p>
 <p><code>{{ request.host_url }}ping/{{ record.target }}</code>
 <button type="button" data-copy="{{ request.host_url }}ping/{{ record.target }}">Copy ping URL</button></p>
+<p><code id="curl-line">{{ ping }}</code>
+<button type="button" data-copy="{{ ping }}">Copy curl</button></p>
 {% endif %}
+<div class="toolbar">
+  <form method="post" action="{{ url_for('monitor_check', name=record.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button type="submit">Run now</button>
+  </form>
+  <form method="post" action="{{ url_for('monitor_pause', name=record.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button type="submit" class="btn-secondary">{% if record.enabled %}Pause{% else %}Resume{% endif %}</button>
+  </form>
+  <a class="button btn-secondary" href="{{ url_for('monitor_edit', name=record.name) }}">Edit</a>
+  <form method="post" action="{{ url_for('monitor_duplicate', name=record.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <button type="submit" class="btn-secondary">Duplicate</button>
+  </form>
+  <button type="button" class="btn-danger" data-open="delete-dialog">Delete</button>
+</div>
+<dialog id="delete-dialog">
+  <form method="post" action="{{ url_for('monitor_delete', name=record.name) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <h2>Delete {{ record.name }}?</h2>
+    <p>The monitor leaves the catalog. Stored results stay in the database.</p>
+    <button type="submit" class="btn-danger">Delete</button>
+    <button type="button" class="btn-secondary" data-close>Cancel</button>
+  </form>
+</dialog>
 <section class="summary">
-  <article><h2>24 h</h2><p>{{ uptime_24 }}</p></article>
-  <article><h2>7 d</h2><p>{{ uptime_7 }}</p></article>
-  <article><h2>30 d</h2><p>{{ uptime_30 }}</p></article>
+  <article class="stat"><h2>24 h</h2><p>{{ uptime_24 }}</p></article>
+  <article class="stat"><h2>7 d</h2><p>{{ uptime_7 }}</p></article>
+  <article class="stat"><h2>30 d</h2><p>{{ uptime_30 }}</p></article>
+  <article class="stat"><h2>Average</h2><p>{{ average }}</p></article>
+  <article class="stat"><h2>p95</h2><p>{{ p95 }}</p></article>
+  <article class="stat"><h2>Checks today</h2><p class="metric">{{ checks_today }}</p></article>
 </section>
-{{ chart }}
+<p class="uptime-bar" aria-label="Uptime bar">{% for part in bar %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
+<figure>
+  <figcaption>Latency for the last 100 checks. Failures stay in the table below.</figcaption>
+  {{ chart }}
+</figure>
 {% if results %}
 <table>
   <thead><tr><th>Checked</th><th>State</th><th>Latency</th><th>Message</th></tr></thead>
   <tbody>
     {% for row in results %}
     <tr>
-      <td>{{ row.checked_at }}</td>
-      <td>{% if row.ok %}up{% else %}down{% endif %}</td>
-      <td>{{ row.latency_ms }} ms</td>
+      <td><time datetime="{{ row.checked_at.isoformat() }}">{{ row.checked_at.strftime("%Y-%m-%d %H:%M") }} UTC</time></td>
+      <td>{% if row.message == "monitoring gap" %}<span class="pill unknown">no data</span>{% else %}<span class="pill {{ 'up' if row.ok else 'down' }}">{% if row.ok %}up{% else %}down{% endif %}</span>{% endif %}</td>
+      <td class="metric">{{ row.latency_ms|round|int }} ms</td>
       <td>{{ row.message }}</td>
     </tr>
     {% endfor %}
@@ -49,15 +90,4 @@
 {% else %}
 <p class="empty">No incidents for this monitor.</p>
 {% endif %}
-<p>
-  <a class="button" href="{{ url_for('monitor_edit', name=record.name) }}">Edit</a>
-</p>
-<form method="post" action="{{ url_for('monitor_pause', name=record.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit">{% if record.enabled %}Pause{% else %}Resume{% endif %}</button>
-</form>
-<form method="post" action="{{ url_for('monitor_check', name=record.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit">Run check now</button>
-</form>
 {% endblock %}

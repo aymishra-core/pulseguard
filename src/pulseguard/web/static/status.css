@@ -233,7 +233,7 @@ button:active, .button:active, .btn:active { transform: translateY(1px); }
   border-color: var(--line);
 }
 .btn-ghost { background: transparent; color: var(--accent); }
-.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger { background: #9d2424; color: #ffffff; }
 .is-loading { opacity: 0.7; pointer-events: none; }
 
 input, select, textarea {
@@ -335,6 +335,11 @@ th { font-size: var(--text-sm); color: var(--muted); }
   animation: rise var(--motion-standard) var(--ease-out);
 }
 
+.layout { display: grid; grid-template-columns: 1fr 280px; gap: var(--space-4); align-items: start; }
+.uptime-bar { display: flex; gap: 1px; height: 14px; margin: var(--space-2) 0; }
+.seg { flex: 1; min-width: 0; background: var(--line); border-radius: 1px; }
+.seg.up { background: var(--ok); }
+.seg.down { background: var(--danger); }
 .spark { width: 100%; height: 2.2rem; }
 .spark polyline { fill: none; stroke: var(--accent); stroke-width: 2; }
 .chart { width: 100%; height: 180px; background: var(--surface-2); border-radius: var(--radius-sm); }
@@ -487,6 +492,10 @@ pre {
     animation: none !important;
     transition: none !important;
   }
+}
+
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 800px) {

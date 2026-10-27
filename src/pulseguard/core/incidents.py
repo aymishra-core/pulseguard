@@ -58,9 +58,11 @@ class IncidentTracker:
         self._slots: dict[str, _Slot] = {}
         self.transitions: list[IncidentTransition] = []
 
-    def observe(self, result: CheckResult, *, suppressed: bool) -> str | None:
+    def observe(self, result: CheckResult, *, suppressed: bool, counts: bool = True) -> str | None:
         """Apply one result. Suppressed failures do not move the streak.
 
+        ``counts`` is false for the first failure after a monitoring gap. That
+        sample does not open an incident and it clears a streak that was building.
         Returns ``open``, ``resolved``, or None when the state did not change.
         """
         if suppressed:
@@ -72,6 +74,11 @@ class IncidentTracker:
             if slot.state == "open" and slot.successes >= self._successes_before_resolve:
                 self.mark_resolved(result.monitor, result.checked_at)
                 return "resolved"
+            return None
+        if not counts:
+            slot.successes = 0
+            if slot.state != "open":
+                slot.failures = 0
             return None
         slot.successes = 0
         slot.failures += 1

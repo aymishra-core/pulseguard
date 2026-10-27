@@ -1,13 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · PulseGuard{% endblock %}
+{% block crumb %}Dashboard{% endblock %}
 {% block body %}
+<section class="hero" id="hero" aria-live="polite">
+  <div class="ring {{ dot }}" id="hero-ring" aria-hidden="true"></div>
+  <div>
+    {% if open_incidents %}
+    <h1 id="hero-title">{{ open_incidents }} incident{% if open_incidents != 1 %}s{% endif %} ongoing{% if incident_since %} since {{ incident_since }}{% endif %}</h1>
+    <p>Open the incident to see what failed and what to check. A monitor that is down is not always an incident yet.</p>
+    {% elif dot == "up" %}
+    <h1 id="hero-title">All systems operational</h1>
+    <p>Every enabled monitor answered its last check.</p>
+    {% elif dot == "down" %}
+    <h1 id="hero-title">{{ headline }}</h1>
+    <p>Look at the red cards first. Run a check now if you just changed something.</p>
+    {% else %}
+    <h1 id="hero-title">{{ headline }}</h1>
+    <p>Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.</p>
+    {% endif %}
+  </div>
+</section>
 <section class="summary" aria-label="Summary">
-  <article><h2>Up</h2><p>{{ counts.up }}</p></article>
-  <article><h2>Down</h2><p>{{ counts.down }}</p></article>
-  <article><h2>Unknown</h2><p>{{ counts.unknown }}</p></article>
-  <article><h2>Open incidents</h2><p>{{ open_incidents }}</p></article>
-  <article><h2>Certificates within 30 days</h2><p>{{ certs }}</p></article>
-  <article><h2>24 h uptime</h2><p>{{ uptime }}</p></article>
+  <article class="stat"><h2>Up</h2><p class="metric">{{ counts.up }}</p></article>
+  <article class="stat"><h2>Down</h2><p class="metric">{{ counts.down }}</p></article>
+  <article class="stat"><h2>Unknown</h2><p class="metric">{{ counts.unknown }}</p></article>
+  <article class="stat"><h2>Open incidents</h2><p class="metric">{{ open_incidents }}</p></article>
+  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric">{{ certs }}</p></article>
+  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p></article>
 </section>
 <p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
 <div class="filters">
@@ -22,28 +41,50 @@
     <option value="">All states</option>
     <option>up</option><option>down</option><option>unknown</option><option>paused</option>
   </select>
+  <label for="filter-sort">Sort</label>
+  <select id="filter-sort">
+    <option value="name">Name</option>
+    <option value="state">State</option>
+  </select>
   <label for="filter-query">Search</label>
   <input id="filter-query" type="search" placeholder="Name" />
 </div>
 {% if empty %}
 <section class="empty">
   <h2>No monitors yet</h2>
-  <p>
-    <a class="button" href="{{ url_for('monitor_new') }}">Add your first monitor</a>
-  </p>
+  <p>PulseGuard only watches addresses you type.</p>
+  <p><a class="button" href="{{ url_for('monitor_new') }}">Add your first monitor</a></p>
 </section>
 {% endif %}
-<div class="cards" data-board>
-  {% for card in cards %}
-  <article class="card" data-monitor data-kind="{{ card.kind }}" data-state="{{ card.state }}" data-name="{{ card.name }}">
-    <p class="kind">{{ card.kind }}</p>
-    <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
-    <p><span class="pill {{ card.state }}">{{ card.state }}</span></p>
-    <p>{{ card.message or "no results yet" }}</p>
-    <p class="muted">{{ card.checked or "not checked" }}</p>
-    <p>24 h uptime {{ card.uptime }}</p>
-    {{ card.spark }}
-  </article>
-  {% endfor %}
+<div class="layout">
+  <div class="cards" data-board>
+    {% for card in cards %}
+    <article class="card" data-monitor data-kind="{{ card.kind }}" data-state="{{ card.state }}" data-name="{{ card.name }}" data-interval="{{ card.interval }}" data-checked="{{ card.checked_at }}">
+      <p class="kind">{{ card.kind }}</p>
+      <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
+      <p><span class="pill {{ card.state }}">{{ card.state }}</span></p>
+      <p>{{ card.plain }}</p>
+      <p class="muted"><time datetime="{{ card.checked_at }}">{{ card.checked or "not checked" }}</time></p>
+      <p class="muted next-check">Next check soon</p>
+      <p class="uptime-bar" aria-label="24 hour uptime bar">{% for part in card.segments %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
+      <p>24 h uptime {{ card.uptime }}</p>
+      {{ card.spark }}
+      <form method="post" action="{{ url_for('monitor_check', name=card.name) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="btn-ghost">Run now</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  <aside class="panel" aria-label="Activity">
+    <h2>Activity</h2>
+    <ul id="activity">
+      {% for event in activity %}
+      <li><span class="pill {{ event.state }}">{{ event.state }}</span> <time datetime="{{ event.at }}">{{ event.at }}</time> {{ event.text }}</li>
+      {% else %}
+      <li>No changes yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>
 </div>
 {% endblock %}
