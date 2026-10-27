@@ -1031,22 +1031,57 @@ def _page(template: str, **extra: Any) -> str:
     text = session.pop("flash", "")
     level = session.pop("flash_level", "ok")
     with _repository() as repo:
-        dot = _dot(repo)
+        shell = _shell(repo)
     return render_template(
         template,
         user=user,
         csrf_token=ensure_csrf(),
-        dot=dot,
         flash=text if isinstance(text, str) else "",
         flash_level=level if isinstance(level, str) else "ok",
+        **shell,
         **extra,
     )
 
 
-def _dot(repo: Any) -> str:
-    """Return the global state word for the top bar."""
+def _shell(repo: Any) -> dict[str, object]:
+    """Return the top-bar state, the plain-language headline, and nav badges."""
     latest = latest_by_name(list(repo.iter_results(None)))
-    states = [monitor_state(record, latest.get(record.name)) for record in repo.monitors()]
+    records = list(repo.monitors())
+    states = [monitor_state(record, latest.get(record.name)) for record in records]
+    dot = _dot_from(states)
+    down = sum(1 for item in states if item == "down")
+    if down == 1:
+        headline = "1 monitor down"
+    elif down:
+        headline = f"{down} monitors down"
+    elif dot == "up":
+        headline = "All systems operational"
+    elif dot == "paused":
+        headline = "All monitors are paused"
+    else:
+        headline = "Waiting for the first checks"
+    now = utc_now()
+    certs = 0
+    for record in records:
+        if record.kind != "tls":
+            continue
+        result = latest.get(record.name)
+        if result is None:
+            continue
+        remaining = days_remaining(result.message, now)
+        if remaining is not None and remaining <= 30:
+            certs += 1
+    return {
+        "dot": dot,
+        "headline": headline,
+        "nav_incidents": len(repo.incidents(state="open")),
+        "nav_certs": certs,
+        "nav_names": [record.name for record in records],
+    }
+
+
+def _dot_from(states: list[str]) -> str:
+    """Return the global state word for the top bar."""
     if "down" in states:
         return "down"
     if "unknown" in states or not states:
@@ -1054,6 +1089,13 @@ def _dot(repo: Any) -> str:
     if all(item == "paused" for item in states):
         return "paused"
     return "up"
+
+
+def _dot(repo: Any) -> str:
+    """Return the global state word for the top bar."""
+    latest = latest_by_name(list(repo.iter_results(None)))
+    states = [monitor_state(record, latest.get(record.name)) for record in repo.monitors()]
+    return _dot_from(states)
 
 
 def _need_user() -> str | RedirectResponse | tuple[str, int]:

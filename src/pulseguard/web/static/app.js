@@ -1,4 +1,143 @@
 (function () {
+  function readStore(key) {
+    try { return localStorage.getItem(key); } catch (err) { return null; }
+  }
+  function writeStore(key, value) {
+    try { localStorage.setItem(key, value); } catch (err) { /* private mode */ }
+  }
+  var root = document.documentElement;
+  var savedTheme = readStore("pulseguard-theme");
+  if (savedTheme === "light" || savedTheme === "dark") root.setAttribute("data-theme", savedTheme);
+  var themeButton = document.querySelector("#theme-toggle");
+  function themeLabel() {
+    var current = root.getAttribute("data-theme");
+    if (!current) current = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    if (themeButton) {
+      themeButton.textContent = current === "dark" ? "Light theme" : "Dark theme";
+      themeButton.setAttribute("aria-pressed", current === "dark" ? "true" : "false");
+    }
+  }
+  themeLabel();
+  if (themeButton) {
+    themeButton.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme");
+      if (!current) current = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      writeStore("pulseguard-theme", next);
+      themeLabel();
+    });
+  }
+  var headline = root.getAttribute("data-headline") || "";
+  var dot = root.getAttribute("data-dot") || "unknown";
+  if (dot === "down") {
+    var count = headline.split(" ")[0];
+    document.title = "(" + count + " down) " + document.title;
+  }
+  var shell = document.querySelector("#shell");
+  var collapse = document.querySelector("#nav-collapse");
+  if (shell && readStore("pulseguard-sidebar") === "collapsed") {
+    shell.classList.add("is-collapsed");
+    if (collapse) collapse.setAttribute("aria-pressed", "true");
+  }
+  if (collapse && shell) {
+    collapse.addEventListener("click", function () {
+      var closed = shell.classList.toggle("is-collapsed");
+      collapse.setAttribute("aria-pressed", closed ? "true" : "false");
+      writeStore("pulseguard-sidebar", closed ? "collapsed" : "open");
+    });
+  }
+  var path = location.pathname;
+  document.querySelectorAll(".nav a").forEach(function (link) {
+    if (link.getAttribute("href") === path) link.setAttribute("aria-current", "page");
+  });
+  var palette = document.querySelector("#palette");
+  var paletteQuery = document.querySelector("#palette-query");
+  var paletteList = document.querySelector("#palette-list");
+  var paletteIndex = 0;
+  var pages = [
+    ["Dashboard", "/dashboard"],
+    ["Monitors", "/monitors"],
+    ["Add monitor", "/monitors/new"],
+    ["Incidents", "/incidents"],
+    ["Certificates", "/certificates"],
+    ["Alerts", "/alerts"],
+    ["SLA", "/sla"],
+    ["Agents", "/agents"],
+    ["Data", "/data"],
+    ["Settings", "/settings"],
+    ["Help", "/help"],
+    ["Public status", "/status"]
+  ];
+  var namesNode = document.querySelector("#nav-monitors");
+  var monitorNames = [];
+  if (namesNode) {
+    try { monitorNames = JSON.parse(namesNode.textContent || "[]"); } catch (err) { monitorNames = []; }
+  }
+  function paletteItems(query) {
+    var needle = (query || "").toLowerCase();
+    var items = pages.map(function (row) { return { label: row[0], href: row[1] }; });
+    monitorNames.forEach(function (name) {
+      items.push({ label: "Monitor " + name, href: "/monitors/" + encodeURIComponent(name) + "/view" });
+    });
+    return items.filter(function (item) { return item.label.toLowerCase().indexOf(needle) !== -1; });
+  }
+  function paintPalette() {
+    if (!paletteList || !paletteQuery) return;
+    var items = paletteItems(paletteQuery.value);
+    if (paletteIndex >= items.length) paletteIndex = 0;
+    paletteList.textContent = "";
+    items.forEach(function (item, index) {
+      var li = document.createElement("li");
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "row";
+      button.textContent = item.label;
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", index === paletteIndex ? "true" : "false");
+      button.addEventListener("click", function () { location.href = item.href; });
+      li.appendChild(button);
+      paletteList.appendChild(li);
+    });
+  }
+  function openPalette() {
+    if (!palette || !paletteQuery) return;
+    palette.hidden = false;
+    paletteIndex = 0;
+    paletteQuery.value = "";
+    paintPalette();
+    paletteQuery.focus();
+  }
+  function closePalette() {
+    if (palette) palette.hidden = true;
+  }
+  var paletteOpen = document.querySelector("#palette-open");
+  if (paletteOpen) paletteOpen.addEventListener("click", openPalette);
+  document.addEventListener("keydown", function (event) {
+    var key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && key === "k") {
+      event.preventDefault();
+      if (palette && palette.hidden) openPalette();
+      else closePalette();
+      return;
+    }
+    if (!palette || palette.hidden) return;
+    if (event.key === "Escape") closePalette();
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      var total = paletteList ? paletteList.children.length : 0;
+      if (!total) return;
+      event.preventDefault();
+      paletteIndex = event.key === "ArrowDown" ? (paletteIndex + 1) % total : (paletteIndex - 1 + total) % total;
+      paintPalette();
+    }
+    if (event.key === "Enter" && paletteList) {
+      var chosen = paletteList.querySelector('[aria-selected="true"]');
+      if (chosen) chosen.click();
+    }
+  });
+  if (paletteQuery) paletteQuery.addEventListener("input", function () { paletteIndex = 0; paintPalette(); });
+  if (palette) palette.addEventListener("click", function (event) { if (event.target === palette) closePalette(); });
+
   var kind = document.querySelector("#kind");
   function showFields() {
     if (!kind) return;
