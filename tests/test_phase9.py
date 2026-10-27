@@ -429,6 +429,47 @@ def test_login_rejects_a_bad_token_and_a_missing_account(tmp_path: Path) -> None
     assert client.post("/logout", data={"username": "ada"}).status_code == 400
 
 
+def test_serve_root_redirects_to_setup_login_or_dashboard(tmp_path: Path) -> None:
+    """GET / follows the account. The public page stays on /status."""
+    database = tmp_path / "history.db"
+    app = create_app(
+        database=database,
+        secret_key="test-secret-key-value",
+        admin_user="operator",
+        admin_password=_PASSWORD,
+        api_key=_API_KEY,
+        serve=True,
+    )
+    client = app.test_client()
+    fresh = client.get("/")
+    assert fresh.status_code == 302
+    assert fresh.headers["Location"].endswith("/setup")
+    setup = client.get("/setup")
+    token = _csrf(setup.get_data(as_text=True))
+    client.post(
+        "/setup",
+        data={"csrf_token": token, "username": "ada", "password": "long-enough"},
+    )
+    signed_out = client.get("/")
+    assert signed_out.status_code == 302
+    assert signed_out.headers["Location"].endswith("/login")
+    login = client.get("/login")
+    token = _csrf(login.get_data(as_text=True))
+    client.post(
+        "/login",
+        data={"csrf_token": token, "username": "ada", "password": "long-enough"},
+    )
+    home = client.get("/")
+    assert home.status_code == 302
+    assert home.headers["Location"].endswith("/dashboard")
+    board = client.get("/status")
+    assert board.status_code == 200
+    assert b"/admin/login" not in board.data
+    assert b'href="/login"' in board.data
+    assert client.get("/admin/login").status_code == 404
+    assert client.get("/admin").status_code == 404
+
+
 def test_serve_creates_the_secret_and_refuses_every_interface(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

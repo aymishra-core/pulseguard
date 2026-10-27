@@ -109,7 +109,9 @@ def _register(app: Flask) -> None:
         return str(exc), 400
 
     @app.get("/")
-    def status_page() -> str | tuple[str, int]:
+    def status_page() -> str | RedirectResponse | tuple[str, int]:
+        if app.config.get("SERVE"):
+            return _serve_home()
         return _public_board()
 
     @app.get("/status")
@@ -122,7 +124,7 @@ def _register(app: Flask) -> None:
             if repo.get_setting("public_status") == "0":
                 return render_template("status_off.html"), 404
             rows = latest_status(repo, monitor=monitor)
-        return render_template("status.html", rows=rows)
+        return render_template("status.html", rows=rows, serve=bool(app.config.get("SERVE")))
 
     @app.get("/api/status")
     def status_json() -> Response:
@@ -159,51 +161,53 @@ def _register(app: Flask) -> None:
             LOGGER.info("heartbeat ping accepted monitor=%s", check.name)
         return "ok", 200
 
-    @app.get("/admin/login")
-    def login_form() -> str:
-        return render_template("login.html", csrf_token=ensure_csrf(), failed=False)
+    if not app.config.get("SERVE"):
 
-    @app.post("/admin/login")
-    def login_submit() -> RedirectResponse | tuple[str, int]:
-        if not csrf_ok():
-            return "csrf token rejected", 400
-        username = request.form.get("username")
-        if login_is_limited(username):
-            LOGGER.info("admin login locked")
-            return "try again later", 429
-        if not login_ok(username, request.form.get("password")):
-            record_login_failure(username)
-            LOGGER.info("admin login failed")
-            return render_template("login.html", csrf_token=ensure_csrf(), failed=True), 401
-        clear_login_failures(username)
-        session["user"] = app.config["ADMIN_USER"]
-        LOGGER.info("admin login succeeded")
-        return redirect(url_for("admin_page"))
+        @app.get("/admin/login")
+        def login_form() -> str:
+            return render_template("login.html", csrf_token=ensure_csrf(), failed=False)
 
-    @app.post("/admin/logout")
-    def logout() -> RedirectResponse | tuple[str, int]:
-        if not csrf_ok():
-            return "csrf token rejected", 400
-        session.clear()
-        return redirect(url_for("login_form"))
+        @app.post("/admin/login")
+        def login_submit() -> RedirectResponse | tuple[str, int]:
+            if not csrf_ok():
+                return "csrf token rejected", 400
+            username = request.form.get("username")
+            if login_is_limited(username):
+                LOGGER.info("admin login locked")
+                return "try again later", 429
+            if not login_ok(username, request.form.get("password")):
+                record_login_failure(username)
+                LOGGER.info("admin login failed")
+                return render_template("login.html", csrf_token=ensure_csrf(), failed=True), 401
+            clear_login_failures(username)
+            session["user"] = app.config["ADMIN_USER"]
+            LOGGER.info("admin login succeeded")
+            return redirect(url_for("admin_page"))
 
-    @app.get("/admin")
-    @login_required
-    def admin_page() -> str:
-        with _repository() as repo:
-            records = repo.monitors()
-        return render_template("admin.html", monitors=records, csrf_token=ensure_csrf())
+        @app.post("/admin/logout")
+        def logout() -> RedirectResponse | tuple[str, int]:
+            if not csrf_ok():
+                return "csrf token rejected", 400
+            session.clear()
+            return redirect(url_for("login_form"))
 
-    @app.post("/admin/monitors")
-    @login_required
-    def admin_update() -> RedirectResponse | tuple[str, int]:
-        if not csrf_ok():
-            return "csrf token rejected", 400
-        name = parse_monitor_name(request.form.get("name"))
-        enabled = parse_enabled(request.form.get("enabled"))
-        with _repository() as repo:
-            repo.update_monitor(name, enabled=enabled)
-        return redirect(url_for("admin_page"))
+        @app.get("/admin")
+        @login_required
+        def admin_page() -> str:
+            with _repository() as repo:
+                records = repo.monitors()
+            return render_template("admin.html", monitors=records, csrf_token=ensure_csrf())
+
+        @app.post("/admin/monitors")
+        @login_required
+        def admin_update() -> RedirectResponse | tuple[str, int]:
+            if not csrf_ok():
+                return "csrf token rejected", 400
+            name = parse_monitor_name(request.form.get("name"))
+            enabled = parse_enabled(request.form.get("enabled"))
+            with _repository() as repo:
+                repo.update_monitor(name, enabled=enabled)
+            return redirect(url_for("admin_page"))
 
     from pulseguard.web.console import register_console
 
@@ -213,6 +217,19 @@ def _register(app: Flask) -> None:
 def _repository() -> SqliteRepository:
     """Open a connection for this request. The caller closes it."""
     return SqliteRepository(Path(str(current_app.config["DATABASE"])))
+
+
+def _serve_home() -> RedirectResponse:
+    """Send a serve visitor to setup, login, or the dashboard."""
+    from pulseguard.web.console import _signed_in
+
+    if _signed_in() is not None:
+        return redirect(url_for("dashboard"))
+    with _repository() as repo:
+        needs_setup = repo.user_count() == 0
+    if needs_setup:
+        return redirect(url_for("setup_form"))
+    return redirect(url_for("console_login"))
 
 
 def _serve_api_key(database: Path) -> str:

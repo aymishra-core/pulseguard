@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 - 2026-10-27
+
+`pulseguard serve` opens `/`. That page sends a new install to setup, a signed-out visitor to login, and a signed-in operator to the dashboard. The public status page stays at `/status`. `/admin` remains on `pulseguard web` only.
+
 ## 1.1.0 - 2026-10-27
 
 `pulseguard serve` opens a browser UI so the operator does not need a terminal after the process starts.

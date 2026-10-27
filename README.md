@@ -17,7 +17,7 @@ In another terminal, run `pulseguard serve`, create the admin account, and choos
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.1.0 adds `pulseguard serve`: first-run setup and the signed-in pages for monitors, incidents, certificates, alerts, SLA, agents, and backups. `run`, `web`, `check`, `console`, `export`, `backup`, and `push` are unchanged. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.1.1 opens `pulseguard serve` at `/`, which goes to setup, login, or the dashboard. The public status page stays at `/status`. Version 1.1.0 adds `pulseguard serve`: first-run setup and the signed-in pages for monitors, incidents, certificates, alerts, SLA, agents, and backups. `run`, `web`, `check`, `console`, `export`, `backup`, and `push` are unchanged. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -138,7 +138,7 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.0 tag notes.
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.1 tag notes.
 
 ## Container
 

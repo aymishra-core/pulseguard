@@ -1,6 +1,6 @@
 """Browser setup and login for ``pulseguard serve``.
 
-The public status page stays on ``/``. These routes are the signed-in console.
+``GET /`` goes to setup, login, or the dashboard. The public page is ``/status``.
 """
 
 from __future__ import annotations

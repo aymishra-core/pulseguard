@@ -9,7 +9,11 @@
     <p class="note">
       This page reads stored results. It does not contact the monitored targets.
     </p>
+    {% if serve %}
+    <p><a href="{{ url_for('console_login') }}">Sign in</a></p>
+    {% else %}
     <p><a href="{{ url_for('login_form') }}">Admin</a></p>
+    {% endif %}
     <table>
       <thead>
         <tr>
