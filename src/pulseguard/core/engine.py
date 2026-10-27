@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from datetime import datetime
 from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
@@ -81,9 +82,12 @@ class Engine:
         agent_host: str | None = None,
         agent_port: int | None = None,
         agent_token: str | None = None,
+        catalog: bool = False,
     ) -> None:
         """Validate the plan. Nothing runs until ``start``."""
-        if not checks:
+        self._catalog = catalog
+        self._catalog_cache: dict[str, tuple[str, ScheduledCheck]] = {}
+        if not checks and not catalog:
             raise ConfigValidationError("engine needs at least one monitor")
         self._checks = tuple(checks)
         self._by_name = index_checks(self._checks)
@@ -155,6 +159,9 @@ class Engine:
         """Start the scheduler, the dispatcher, the pool, and the writer."""
         if self._started:
             raise EngineError("engine is already running")
+        self._load_incidents()
+        if self._catalog:
+            self._reload_catalog()
         self._stop.clear()
         self._dispatch_done.clear()
         self._executor = ThreadPoolExecutor(
@@ -228,6 +235,26 @@ class Engine:
             return collector.port
         return self._agent_port
 
+    def catalog_names(self) -> tuple[str, ...]:
+        """Return the monitors the scheduler is currently willing to run."""
+        with self._lock:
+            return tuple(check.name for check in self._checks)
+
+    def heartbeat_for(self, token: str) -> object | None:
+        """Return the live heartbeat whose token matches. The token is not logged."""
+        import hmac
+
+        from pulseguard.checks.heartbeat import HeartbeatCheck
+
+        with self._lock:
+            checks = self._checks
+        for check in checks:
+            if not isinstance(check, HeartbeatCheck):
+                continue
+            if len(check.token) == len(token) and hmac.compare_digest(check.token, token):
+                return check
+        return None
+
     def thread_names(self) -> list[str]:
         """Return the engine threads that are still alive."""
         alive: list[Thread | None] = [self._scheduler, self._dispatcher, self._writer]
@@ -235,10 +262,79 @@ class Engine:
             alive.append(self._collector.thread)
         return [thread.name for thread in alive if thread is not None and thread.is_alive()]
 
+    def _reload_catalog(self) -> None:
+        """Replace the scheduled checks from the catalog. Unchanged objects stay."""
+        if self._factory is None:
+            return
+        from pulseguard.core.catalog import checks_from_catalog, default_thresholds
+
+        checks: tuple[ScheduledCheck, ...] = ()
+        edges: dict[str, tuple[str, ...]] = {}
+        repo = self._factory()
+        try:
+            checks, edges = checks_from_catalog(
+                repo,
+                on_ping=self._store_ping,
+                cache=self._catalog_cache,
+            )
+            failures, successes = default_thresholds(repo)
+        except Exception:
+            LOGGER.warning("catalog reload failed")
+            return
+        finally:
+            repo.close()
+        try:
+            self.incidents.set_thresholds(failures, successes)
+        except ConfigValidationError:
+            LOGGER.warning("catalog thresholds rejected")
+        with self._lock:
+            self._checks = checks
+            self._by_name = index_checks(checks)
+            stored_edges: dict[str, Sequence[str]] = {}
+            for edge_name, parents in edges.items():
+                stored_edges[edge_name] = parents
+            self._edges = stored_edges
+            live = {check.name for check in checks}
+            for check in checks:
+                self._next_due.setdefault(check.name, 0.0)
+            for name in list(self._next_due):
+                if name not in live:
+                    del self._next_due[name]
+
+    def _store_ping(self, monitor: str, when: datetime) -> None:
+        """Persist a heartbeat ping on a connection that is not the writer's."""
+        if self._factory is None:
+            return
+        repo = self._factory()
+        try:
+            save = getattr(repo, "save_ping", None)
+            if callable(save):
+                save(monitor, when)
+        finally:
+            repo.close()
+
+    def _load_incidents(self) -> None:
+        """Re-open incidents that were still open when the process last exited."""
+        if self._factory is None:
+            return
+        repo = self._factory()
+        try:
+            names = getattr(repo, "open_incident_names", None)
+            if not callable(names):
+                return
+            for name in names():
+                self.incidents.restore_open(name)
+        finally:
+            repo.close()
+
     def _schedule_loop(self) -> None:
         """Put due checks on the bounded queue. A full queue defers the check."""
+        reloaded = 0.0
         while not self._stop.is_set():
             now = time.monotonic()
+            if self._catalog and now - reloaded >= 1.0:
+                self._reload_catalog()
+                reloaded = now
             for check in select_due(self._checks, self._snapshot_due(), now):
                 try:
                     self._jobs.put_nowait(check)
@@ -327,13 +423,26 @@ class Engine:
             self._down.add(result.monitor)
         suppressed = cause is not None and not result.ok
         action = self.incidents.observe(result, suppressed=suppressed)
-        self._alert(result, action)
+        if repository is not None and action == "open":
+            opener = getattr(repository, "open_incident", None)
+            if callable(opener):
+                opener(result.monitor, result.checked_at, result.message, cause or "")
+        elif repository is not None and action == "resolved":
+            closer = getattr(repository, "resolve_incident", None)
+            if callable(closer):
+                closer(result.monitor, result.checked_at)
+        self._alert(result, action, repository)
         if repository is not None:
             repository.add_result(result)
         with self._lock:
             self._stored += 1
 
-    def _alert(self, result: CheckResult, action: str | None) -> None:
+    def _alert(
+        self,
+        result: CheckResult,
+        action: str | None,
+        repository: Repository | None = None,
+    ) -> None:
         """Write the evidence pack on open, then deliver one alert per transition.
 
         The incident log line is already written inside the tracker, before this
@@ -355,17 +464,39 @@ class Engine:
                     )
                 except AlertError:
                     LOGGER.warning("evidence pack failed monitor=%s", result.monitor)
-        if self._notifier is None:
-            return
-        if action is not None:
+        status = "not-configured"
+        error_text = ""
+        if self._notifier is not None and action is not None:
             try:
                 self._notifier.send(_incident_notice(result, action))
+                status = "sent"
             except Exception as exc:
+                status = "failed"
+                error_text = type(exc).__name__
                 LOGGER.warning(
                     "alert delivery failed monitor=%s error=%s",
                     result.monitor,
                     type(exc).__name__,
                 )
+        if repository is not None and action is not None:
+            add_alert = getattr(repository, "add_alert", None)
+            if callable(add_alert):
+                recipient = ""
+                getter = getattr(repository, "get_setting", None)
+                if callable(getter):
+                    stored = getter("smtp_to")
+                    if isinstance(stored, str):
+                        recipient = stored
+                add_alert(
+                    created_at=utc_now(),
+                    monitor=result.monitor,
+                    kind=action,
+                    recipient=recipient,
+                    status=status,
+                    error_text=error_text,
+                )
+        if self._notifier is None:
+            return
         note = getattr(self._notifier, "note", None)
         if callable(note):
             try:

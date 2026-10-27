@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import time
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -84,7 +85,11 @@ def passwords_match(attempt: object, salt: bytes, digest: bytes) -> bool:
     """Hash ``attempt`` and compare the digest. A bad type does not match."""
     if not isinstance(attempt, str) or len(attempt) > _MAX_PASSWORD_LENGTH:
         return False
+    if not salt or not digest:
+        return False
     check = hashlib.pbkdf2_hmac("sha256", attempt.encode("utf-8"), salt, _PASSWORD_ITERATIONS)
+    if len(check) != len(digest):
+        return False
     return hmac.compare_digest(check, digest)
 
 
@@ -144,6 +149,52 @@ def login_required(fn: F) -> F:
     wrapper.__name__ = fn.__name__
     wrapper.__doc__ = fn.__doc__
     return wrapper  # type: ignore[return-value]
+
+
+def login_is_limited(username: object) -> bool:
+    """Return True after 5 failures for this IP and username inside 60 seconds."""
+    stamps = _login_stamps(username)
+    return len(stamps) >= 5
+
+
+def record_login_failure(username: object) -> None:
+    """Remember one failed login. A locked key does not grow, so the lock ends."""
+    if login_is_limited(username):
+        return
+    stamps = _login_stamps(username)
+    stamps.append(time.monotonic())
+    _login_book()[_login_key(username)] = stamps
+
+
+def clear_login_failures(username: object) -> None:
+    """Forget failures after a successful login."""
+    _login_book().pop(_login_key(username), None)
+
+
+def _login_book() -> dict[str, list[float]]:
+    """Return the process-local failure book stored on the app."""
+    book = current_app.config["LOGIN_FAILURES"]
+    if not isinstance(book, dict):
+        book = {}
+        current_app.config["LOGIN_FAILURES"] = book
+    return book
+
+
+def _login_key(username: object) -> str:
+    """Build the IP-and-username key. The password is not part of it."""
+    ip = request.remote_addr or ""
+    name = username if isinstance(username, str) else ""
+    return f"{ip}\n{name}"
+
+
+def _login_stamps(username: object) -> list[float]:
+    """Return failures still inside the 60 second window."""
+    now = time.monotonic()
+    book = _login_book()
+    key = _login_key(username)
+    kept = [stamp for stamp in book.get(key, []) if now - stamp < 60]
+    book[key] = kept
+    return kept
 
 
 def _same_text(supplied: str, expected: str) -> bool:

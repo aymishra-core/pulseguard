@@ -47,6 +47,55 @@ _MYSQL_SCHEMA: tuple[str, ...] = (
         enabled TINYINT NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    """
+    CREATE TABLE IF NOT EXISTS incidents (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        monitor VARCHAR(128) NOT NULL,
+        state VARCHAR(16) NOT NULL,
+        started_at VARCHAR(40) NOT NULL,
+        ended_at VARCHAR(40) NULL,
+        reason VARCHAR(2000) NOT NULL,
+        cause VARCHAR(128) NOT NULL,
+        PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS alerts (
+        id BIGINT NOT NULL AUTO_INCREMENT,
+        created_at VARCHAR(40) NOT NULL,
+        monitor VARCHAR(128) NOT NULL,
+        kind VARCHAR(16) NOT NULL,
+        recipient VARCHAR(254) NOT NULL,
+        status VARCHAR(32) NOT NULL,
+        error_text VARCHAR(500) NOT NULL,
+        PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        username VARCHAR(64) PRIMARY KEY,
+        salt_hex VARCHAR(64) NOT NULL,
+        digest_hex VARCHAR(128) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        setting_key VARCHAR(64) PRIMARY KEY,
+        value VARCHAR(2048) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS monitor_options (
+        name VARCHAR(128) PRIMARY KEY,
+        body VARCHAR(8000) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS heartbeat_pings (
+        monitor VARCHAR(128) PRIMARY KEY,
+        last_ping VARCHAR(40) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 )
 _NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _HOST_RE = re.compile(r"^[A-Za-z0-9.:-]{1,255}$")

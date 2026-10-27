@@ -21,3 +21,27 @@ td {
 .note {
   max-width: 40rem;
 }
+
+.panel {
+  max-width: 28rem;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background: #fff;
+  border: 1px solid #ccc;
+}
+
+label {
+  display: block;
+  margin-top: 0.8rem;
+}
+
+input,
+button {
+  font: inherit;
+  margin-top: 0.3rem;
+}
+
+.error {
+  color: #8a1f1f;
+  font-weight: 600;
+}

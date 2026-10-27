@@ -55,6 +55,7 @@ class HeartbeatCheck(BaseCheck):
         self.grace_seconds = grace_seconds
         self._clock = clock or utc_now
         self._last_seen: datetime | None = None
+        self._persist_ping: Callable[[datetime], None] | None = None
 
     @staticmethod
     def new_token() -> str:
@@ -89,6 +90,14 @@ class HeartbeatCheck(BaseCheck):
         if not isinstance(moment, datetime) or moment.tzinfo is None:
             raise ConfigValidationError("ping time must be timezone-aware")
         self._last_seen = moment
+        if self._persist_ping is not None:
+            self._persist_ping(moment)
+
+    def restore_last_ping(self, when: datetime) -> None:
+        """Restore a ping that was stored before this process started."""
+        if not isinstance(when, datetime) or when.tzinfo is None:
+            raise ConfigValidationError("ping time must be timezone-aware")
+        self._last_seen = when
 
     @log_call
     @timed

@@ -1,5 +1,12 @@
 # PulseGuard
 
+```sh
+python3 -m venv .venv && . .venv/bin/activate && pip install -e .
+pulseguard serve
+```
+
+Open the browser page, create the admin account, and add monitors from there. `./start.sh` does the same steps.
+
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
 Version 1.0.0 serves the status page, the admin login, the JSON API, the desktop window, and a container. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.

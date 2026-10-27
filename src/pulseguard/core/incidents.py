@@ -93,6 +93,20 @@ class IncidentTracker:
         self.transitions.append(IncidentTransition(monitor, "resolved", when))
         LOGGER.info("incident resolved monitor=%s", monitor)
 
+    def restore_open(self, monitor: str) -> None:
+        """Mark ``monitor`` open without logging. A restart uses this."""
+        slot = self._slots.setdefault(monitor, _Slot())
+        slot.state = "open"
+        slot.failures = 0
+        slot.successes = 0
+
+    def set_thresholds(self, failures_before_open: int, successes_before_resolve: int) -> None:
+        """Apply operator settings. Existing open incidents stay open."""
+        self._failures_before_open = require_streak(failures_before_open, "failures_before_open")
+        self._successes_before_resolve = require_streak(
+            successes_before_resolve, "successes_before_resolve"
+        )
+
     def is_open(self, monitor: str) -> bool:
         """Return True when ``monitor`` has an open incident."""
         slot = self._slots.get(monitor)

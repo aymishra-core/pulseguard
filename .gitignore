@@ -11,6 +11,8 @@ build/
 *.egg-info/
 .env
 logs/
+data/
+secret.key
 *.db
 *.pgdb
 .DS_Store

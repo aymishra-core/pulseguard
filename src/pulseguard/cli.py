@@ -60,6 +60,8 @@ def main(argv: Sequence[str] | None = None, *, stdout: TextIO | None = None) -> 
             return _run_web(args, output)
         if args.command == "console":
             return _run_console(args)
+        if args.command == "serve":
+            return _run_serve(args, output)
         raise ConfigValidationError(f"unknown command {args.command}")
     except ConfigValidationError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -85,6 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_push(sub)
     _add_web(sub)
     _add_console(sub)
+    _add_serve(sub)
     return parser
 
 
@@ -181,6 +184,16 @@ def _add_web(sub: Any) -> None:
     _add_log_args(web)
 
 
+def _add_serve(sub: Any) -> None:
+    """Add ``serve``. It creates a data directory and opens the browser UI."""
+    serve = sub.add_parser("serve", help="start PulseGuard and open the browser")
+    serve.add_argument("--host", default="127.0.0.1", help="listen address")
+    serve.add_argument("--port", type=int, default=8080, help="listen port")
+    serve.add_argument("--data-dir", type=Path, default=Path("data"), help="database directory")
+    serve.add_argument("--no-browser", action="store_true", help="do not open a browser")
+    _add_log_args(serve)
+
+
 def _add_console(sub: Any) -> None:
     """Add ``console``. It opens the desktop window."""
     console = sub.add_parser("console", help="open the desktop status window")
@@ -267,6 +280,60 @@ def _web_secrets() -> tuple[str, str, str, str]:
         require_admin_password(os.environ.get("PULSEGUARD_ADMIN_PASSWORD", "")),
         require_api_key_value(os.environ.get("PULSEGUARD_API_KEY", "")),
     )
+
+
+def _run_serve(args: argparse.Namespace, output: TextIO) -> int:
+    """Create the data directory, serve the UI, and open a browser unless asked not to."""
+    import secrets
+    import webbrowser
+
+    from waitress import serve
+
+    from pulseguard.storage import SqliteRepository
+    from pulseguard.web.app import create_app
+
+    host = require_agent_host(args.host)
+    port = require_agent_port(args.port, allow_ephemeral=False)
+    data_dir = Path(args.data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    database = data_dir / "pulseguard.db"
+    secret_path = data_dir / "secret.key"
+    if not secret_path.exists():
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        descriptor = os.open(secret_path, flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(secrets.token_urlsafe(32))
+    secret = secret_path.read_text(encoding="utf-8").strip()
+    SqliteRepository(database).close()
+    app = create_app(
+        database=database,
+        secret_key=secret,
+        admin_user="operator",
+        admin_password="serve-placeholder",
+        api_key="serve-placeholder1",
+        serve=True,
+    )
+    engine = Engine(
+        (),
+        repository_factory=lambda: SqliteRepository(database),
+        catalog=True,
+        notifier=_email_notifier(),
+    )
+    app.config["ENGINE"] = engine
+    engine.start()
+    output.write(f"web http://{host}:{port}\n")
+    output.flush()
+    if not args.no_browser:
+        webbrowser.open(f"http://{host}:{port}/")
+    try:
+        serve(app, host=host, port=port, threads=4)
+    except KeyboardInterrupt:
+        pass
+    except OSError as exc:
+        raise ConfigValidationError("web server could not listen") from exc
+    finally:
+        engine.stop()
+    return 0
 
 
 def _run_console(args: argparse.Namespace) -> int:

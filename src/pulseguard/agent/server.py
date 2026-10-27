@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import socket
+from collections.abc import Callable
 from queue import Full, Queue
 from threading import BoundedSemaphore, Event, Lock, Thread
 
@@ -45,6 +46,7 @@ class Collector:
         *,
         max_clients: int = MAX_CLIENTS,
         timeout: float = FRAME_TIMEOUT_SECONDS,
+        on_result: Callable[[CheckResult], None] | None = None,
     ) -> None:
         """Validate the bind address. The socket opens in ``start``."""
         self._host = require_agent_host(host)
@@ -60,6 +62,7 @@ class Collector:
         self._thread: Thread | None = None
         self._children: list[Thread] = []
         self._live: set[socket.socket] = set()
+        self._on_result = on_result
         self.port = port
 
     @property
@@ -158,6 +161,8 @@ class Collector:
                 return
             write_message(conn, ACK, b"ok")
             LOGGER.info("agent result monitor=%s", result.monitor)
+            if self._on_result is not None:
+                self._on_result(result)
         except ProtocolError as exc:
             LOGGER.warning("agent frame rejected reason=%s", exc)
             self._refuse(conn)

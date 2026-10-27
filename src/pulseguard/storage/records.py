@@ -14,7 +14,7 @@ from pulseguard.checks.models import CheckResult, Severity
 from pulseguard.exceptions import ConfigValidationError, StorageError
 
 # Validation limits, not measurements.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_RETENTION_DAYS = 180
 MAX_RETENTION_DAYS = 3650
 DEFAULT_CHUNK_SIZE = 100
@@ -64,6 +64,32 @@ class MonitorRecord:
             "interval_seconds": self.interval_seconds,
             "enabled": self.enabled,
         }
+
+
+@dataclass(frozen=True)
+class IncidentRow:
+    """One stored incident. Times stay as the text the database holds."""
+
+    id: int
+    monitor: str
+    state: str
+    started_at: str
+    ended_at: str
+    reason: str
+    cause: str
+
+
+@dataclass(frozen=True)
+class AlertRow:
+    """One alert-log row. The SMTP password is not stored here."""
+
+    id: int
+    created_at: str
+    monitor: str
+    kind: str
+    recipient: str
+    status: str
+    error_text: str
 
 
 def require_monitor_name(name: object) -> str:

@@ -6,8 +6,9 @@ One connection is not shared across threads. The engine's writer comes later.
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -19,6 +20,8 @@ from pulseguard.storage.base import Repository
 from pulseguard.storage.records import (
     DEFAULT_CHUNK_SIZE,
     SCHEMA_VERSION,
+    AlertRow,
+    IncidentRow,
     MonitorRecord,
     format_timestamp,
     monitor_from_row,
@@ -93,7 +96,7 @@ class SqlRepository(Repository):
         return self._schema_version
 
     def migrate(self) -> int:
-        """Apply schema version 1 once. A second call is a no-op.
+        """Apply the schema once. A database already at this version is left as it is.
 
         Idempotent migrations: the version table skips work that already ran,
         and ``CREATE TABLE IF NOT EXISTS`` lets a crashed apply finish later.
@@ -246,6 +249,211 @@ class SqlRepository(Repository):
         self._commit_if_needed()
         return count == 1
 
+    def save_options(self, name: str, options: Mapping[str, object]) -> None:
+        """Store kind-specific fields for one monitor. The catalog row stays separate."""
+        chosen = require_monitor_name(name)
+        body = json.dumps(dict(options), sort_keys=True, separators=(",", ":"))
+        if len(body) > 8000:
+            raise ConfigValidationError("monitor options are too large")
+        self._change(
+            "DELETE FROM monitor_options WHERE name = " + self._mark,
+            (chosen,),
+        )
+        self._change(
+            f"INSERT INTO monitor_options (name, body) VALUES ({self._slots(2)})",
+            (chosen, body),
+        )
+        self._commit_if_needed()
+
+    def monitor_options(self, name: str) -> dict[str, object]:
+        """Return stored options, or an empty mapping when the monitor has none."""
+        chosen = require_monitor_name(name)
+        row = self._fetchone(
+            f"SELECT body FROM monitor_options WHERE name = {self._mark}",
+            (chosen,),
+        )
+        if row is None or not isinstance(row[0], str):
+            return {}
+        try:
+            parsed = json.loads(row[0])
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {str(key): value for key, value in parsed.items()}
+
+    def option_map(self) -> dict[str, dict[str, object]]:
+        """Return every monitor's options, keyed by name."""
+        rows = self._fetchall("SELECT name, body FROM monitor_options")
+        found: dict[str, dict[str, object]] = {}
+        for row in rows:
+            if not isinstance(row[0], str) or not isinstance(row[1], str):
+                continue
+            try:
+                parsed = json.loads(row[1])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                found[row[0]] = {str(key): value for key, value in parsed.items()}
+        return found
+
+    def open_incident(self, monitor: str, started_at: datetime, reason: str, cause: str) -> None:
+        """Record an incident that is still open."""
+        chosen = require_monitor_name(monitor)
+        self._change(
+            "INSERT INTO incidents (monitor, state, started_at, ended_at, reason, cause) "
+            f"VALUES ({self._slots(6)})",
+            (chosen, "open", format_timestamp(started_at), None, reason[:2000], cause[:128]),
+        )
+        self._commit_if_needed()
+
+    def resolve_incident(self, monitor: str, ended_at: datetime) -> None:
+        """Close the newest open incident for ``monitor``."""
+        chosen = require_monitor_name(monitor)
+        row = self._fetchone(
+            "SELECT id FROM incidents WHERE monitor = "
+            f"{self._mark} AND state = 'open' ORDER BY started_at DESC LIMIT 1",
+            (chosen,),
+        )
+        if row is None:
+            return
+        self._change(
+            "UPDATE incidents SET state = 'resolved', ended_at = "
+            f"{self._mark} WHERE id = {self._mark}",
+            (format_timestamp(ended_at), _as_int(row[0])),
+        )
+        self._commit_if_needed()
+
+    def incidents(self, *, state: str | None = None) -> list[IncidentRow]:
+        """Return incidents, newest first. ``state`` is ``open`` or ``resolved``."""
+        if state is None:
+            rows = self._fetchall(
+                "SELECT id, monitor, state, started_at, ended_at, reason, cause "
+                "FROM incidents ORDER BY started_at DESC"
+            )
+        else:
+            if state not in {"open", "resolved"}:
+                raise ConfigValidationError("incident state must be open or resolved")
+            rows = self._fetchall(
+                "SELECT id, monitor, state, started_at, ended_at, reason, cause "
+                f"FROM incidents WHERE state = {self._mark} ORDER BY started_at DESC",
+                (state,),
+            )
+        return [_incident_row(row) for row in rows]
+
+    def open_incident_names(self) -> list[str]:
+        """Return monitors that still have an open incident."""
+        rows = self._fetchall("SELECT monitor FROM incidents WHERE state = 'open'")
+        return [row[0] for row in rows if isinstance(row[0], str)]
+
+    def add_alert(
+        self,
+        *,
+        created_at: datetime,
+        monitor: str,
+        kind: str,
+        recipient: str,
+        status: str,
+        error_text: str,
+    ) -> None:
+        """Append one alert-log row. The password is not a column."""
+        if kind not in {"open", "resolved", "test"}:
+            raise ConfigValidationError("alert kind is not recognised")
+        if status not in {"sent", "failed", "not-configured"}:
+            raise ConfigValidationError("alert status is not recognised")
+        self._change(
+            "INSERT INTO alerts (created_at, monitor, kind, recipient, status, error_text) "
+            f"VALUES ({self._slots(6)})",
+            (
+                format_timestamp(created_at),
+                require_monitor_name(monitor),
+                kind,
+                recipient[:254],
+                status,
+                error_text[:500],
+            ),
+        )
+        self._commit_if_needed()
+
+    def alerts(self) -> list[AlertRow]:
+        """Return the alert log, newest first."""
+        rows = self._fetchall(
+            "SELECT id, created_at, monitor, kind, recipient, status, error_text "
+            "FROM alerts ORDER BY created_at DESC, id DESC"
+        )
+        return [_alert_row(row) for row in rows]
+
+    def user_count(self) -> int:
+        """Return how many admin accounts exist."""
+        row = self._fetchone("SELECT COUNT(*) FROM users", ())
+        if row is None:
+            return 0
+        return _as_int(row[0])
+
+    def save_user(self, username: str, salt_hex: str, digest_hex: str) -> None:
+        """Insert one admin account. A second insert of the same name replaces it."""
+        self._change(f"DELETE FROM users WHERE username = {self._mark}", (username,))
+        self._change(
+            f"INSERT INTO users (username, salt_hex, digest_hex) VALUES ({self._slots(3)})",
+            (username, salt_hex, digest_hex),
+        )
+        self._commit_if_needed()
+
+    def user_hash(self, username: str) -> tuple[str, str] | None:
+        """Return ``(salt_hex, digest_hex)`` or None."""
+        row = self._fetchone(
+            f"SELECT salt_hex, digest_hex FROM users WHERE username = {self._mark}",
+            (username,),
+        )
+        if row is None or not isinstance(row[0], str) or not isinstance(row[1], str):
+            return None
+        return row[0], row[1]
+
+    def get_setting(self, key: str) -> str | None:
+        """Return one setting, or None when it has not been stored."""
+        row = self._fetchone(
+            f"SELECT value FROM settings WHERE setting_key = {self._mark}",
+            (key,),
+        )
+        if row is None or not isinstance(row[0], str):
+            return None
+        return row[0]
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Insert or replace one setting. Callers keep secrets out of the logs."""
+        if not isinstance(key, str) or not key or len(key) > 64:
+            raise ConfigValidationError("setting name must be 1..64 characters")
+        if len(value) > 2048:
+            raise ConfigValidationError("setting value is too long")
+        self._change(f"DELETE FROM settings WHERE setting_key = {self._mark}", (key,))
+        self._change(
+            f"INSERT INTO settings (setting_key, value) VALUES ({self._slots(2)})",
+            (key, value),
+        )
+        self._commit_if_needed()
+
+    def save_ping(self, monitor: str, when: datetime) -> None:
+        """Remember the latest heartbeat ping for one monitor."""
+        chosen = require_monitor_name(monitor)
+        stamp = format_timestamp(when)
+        self._change(f"DELETE FROM heartbeat_pings WHERE monitor = {self._mark}", (chosen,))
+        self._change(
+            f"INSERT INTO heartbeat_pings (monitor, last_ping) VALUES ({self._slots(2)})",
+            (chosen, stamp),
+        )
+        self._commit_if_needed()
+
+    def last_ping(self, monitor: str) -> str | None:
+        """Return the stored ping timestamp, or None."""
+        chosen = require_monitor_name(monitor)
+        row = self._fetchone(
+            f"SELECT last_ping FROM heartbeat_pings WHERE monitor = {self._mark}",
+            (chosen,),
+        )
+        if row is None or not isinstance(row[0], str):
+            return None
+        return row[0]
+
     def transaction(self) -> AbstractContextManager[None]:
         """Commit on success and roll back when the body raises."""
         return self._transaction()
@@ -390,6 +598,44 @@ class SqlRepository(Repository):
         """Refuse work after ``close``."""
         if self._closed:
             raise StorageError("repository is closed")
+
+
+def _incident_row(row: tuple[object, ...]) -> IncidentRow:
+    """Map one SELECT onto an incident."""
+    if len(row) != 7:
+        raise StorageError("stored incident has the wrong shape")
+    ended = row[4] if isinstance(row[4], str) else ""
+    return IncidentRow(
+        id=_as_int(row[0]),
+        monitor=str(row[1]),
+        state=str(row[2]),
+        started_at=str(row[3]),
+        ended_at=ended,
+        reason=str(row[5]),
+        cause=str(row[6]),
+    )
+
+
+def _alert_row(row: tuple[object, ...]) -> AlertRow:
+    """Map one SELECT onto an alert."""
+    if len(row) != 7:
+        raise StorageError("stored alert has the wrong shape")
+    return AlertRow(
+        id=_as_int(row[0]),
+        created_at=str(row[1]),
+        monitor=str(row[2]),
+        kind=str(row[3]),
+        recipient=str(row[4]),
+        status=str(row[5]),
+        error_text=str(row[6]),
+    )
+
+
+def _as_int(value: object) -> int:
+    """Return a stored integer id."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise StorageError("stored id is invalid")
+    return value
 
 
 def _monitor_params(record: MonitorRecord) -> tuple[object, ...]:

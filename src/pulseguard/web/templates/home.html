@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PulseGuard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
+  </head>
+  <body>
+    <main class="panel">
+      <h1>PulseGuard</h1>
+      <p>Signed in as {{ user }}.</p>
+      <form method="post" action="{{ url_for('console_logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit">Log out</button>
+      </form>
+    </main>
+  </body>
+</html>

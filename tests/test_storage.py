@@ -53,7 +53,7 @@ def test_sqlite_round_trip_orders_results_and_reopens(tmp_path: Path) -> None:
     newer = _result("web", when=_NEWER, message="HTTP 503", ok=False)
     other = _result("job", when=_NEWER, message="ping is within the grace period")
     with SqliteRepository(path) as repo:
-        assert repo.schema_version == 1
+        assert repo.schema_version == 2
         repo.migrate()
         first = repo.add_result(newer)
         second = repo.add_result(older)
@@ -74,7 +74,7 @@ def test_sqlite_round_trip_orders_results_and_reopens(tmp_path: Path) -> None:
         assert repo.delete_monitor("web") is True
         assert repo.results_for("web")[0].message == "HTTP 200"
     with SqliteRepository(path) as again:
-        assert again.schema_version == 1
+        assert again.schema_version == 2
         assert len(again.results_for("web")) == 1
         connection = sqlite3.connect(path)
         try:
@@ -152,7 +152,7 @@ def test_closed_repo_and_bad_rows_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(StorageError, match="closed"):
         repo.add_result(_result("web"))
     with pytest.raises(StorageError, match="unsupported schema version"):
-        _stamp_version(path, 2)
+        _stamp_version(path, 3)
         SqliteRepository(path)
     fresh = tmp_path / "bad.db"
     with SqliteRepository(fresh) as repo:
@@ -401,7 +401,7 @@ def test_mysql_scripted_connection_uses_the_same_statements() -> None:
     """MySQL CRUD is the same port, exercised without a server."""
     connection = _FakeConnection(_migration_steps() + _crud_steps())
     repo = MysqlRepository(connection=connection)
-    assert repo.schema_version == 1
+    assert repo.schema_version == 2
     assert issubclass(MysqlRepository, Repository)
     new_id = repo.add_result(_result("web", when=_OLDER))
     assert new_id == 7

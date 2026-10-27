@@ -24,11 +24,14 @@ from pulseguard.checks.heartbeat import HeartbeatCheck
 from pulseguard.exceptions import ConfigValidationError, PulseGuardError
 from pulseguard.storage import SqliteRepository
 from pulseguard.web.auth import (
+    clear_login_failures,
     csrf_ok,
     ensure_csrf,
     hash_password,
+    login_is_limited,
     login_ok,
     login_required,
+    record_login_failure,
     require_admin_password,
     require_admin_user,
     require_api_key,
@@ -52,14 +55,19 @@ def create_app(
     admin_password: str,
     api_key: str,
     heartbeats: Sequence[HeartbeatCheck] = (),
+    serve: bool = False,
 ) -> Flask:
     """Build the app. The password is hashed before it is discarded."""
     key = require_secret_key(secret_key)
-    user = require_admin_user(admin_user)
-    password = require_admin_password(admin_password)
-    token = require_api_key_value(api_key)
-    salt, digest = hash_password(password)
-    del password
+    user = require_admin_user(admin_user) if not serve else "operator"
+    if serve:
+        token = _serve_api_key(database)
+        salt, digest = b"", b""
+    else:
+        password = require_admin_password(admin_password)
+        token = require_api_key_value(api_key)
+        salt, digest = hash_password(password)
+        del password
     app = Flask(
         __name__,
         template_folder=str(Path(__file__).with_name("templates")),
@@ -75,6 +83,8 @@ def create_app(
     app.config["ADMIN_DIGEST"] = digest
     app.config["API_KEY"] = token
     app.config["HEARTBEATS"] = _index_heartbeats(heartbeats)
+    app.config["SERVE"] = serve
+    app.config["LOGIN_FAILURES"] = {}
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     _register(app)
     return app
@@ -97,9 +107,18 @@ def _register(app: Flask) -> None:
         return str(exc), 400
 
     @app.get("/")
-    def status_page() -> str:
+    def status_page() -> str | tuple[str, int]:
+        return _public_board()
+
+    @app.get("/status")
+    def public_status() -> str | tuple[str, int]:
+        return _public_board()
+
+    def _public_board() -> str | tuple[str, int]:
         monitor = request.args.get("monitor")
         with _repository() as repo:
+            if repo.get_setting("public_status") == "0":
+                return render_template("status_off.html"), 404
             rows = latest_status(repo, monitor=monitor)
         return render_template("status.html", rows=rows)
 
@@ -125,7 +144,7 @@ def _register(app: Flask) -> None:
     @app.route("/ping/<token>", methods=["GET", "POST"])
     def ping(token: str) -> tuple[str, int]:
         book: dict[str, HeartbeatCheck] = app.config["HEARTBEATS"]
-        check = book.get(token) if _TOKEN_RE.fullmatch(token) else None
+        check = _live_heartbeat(token, book)
         if check is None:
             LOGGER.info("heartbeat ping rejected")
             return "not found", 404
@@ -144,9 +163,15 @@ def _register(app: Flask) -> None:
     def login_submit() -> RedirectResponse | tuple[str, int]:
         if not csrf_ok():
             return "csrf token rejected", 400
-        if not login_ok(request.form.get("username"), request.form.get("password")):
+        username = request.form.get("username")
+        if login_is_limited(username):
+            LOGGER.info("admin login locked")
+            return "try again later", 429
+        if not login_ok(username, request.form.get("password")):
+            record_login_failure(username)
             LOGGER.info("admin login failed")
             return render_template("login.html", csrf_token=ensure_csrf(), failed=True), 401
+        clear_login_failures(username)
         session["user"] = app.config["ADMIN_USER"]
         LOGGER.info("admin login succeeded")
         return redirect(url_for("admin_page"))
@@ -176,10 +201,43 @@ def _register(app: Flask) -> None:
             repo.update_monitor(name, enabled=enabled)
         return redirect(url_for("admin_page"))
 
+    from pulseguard.web.console import register_console
+
+    register_console(app)
+
 
 def _repository() -> SqliteRepository:
     """Open a connection for this request. The caller closes it."""
     return SqliteRepository(Path(str(current_app.config["DATABASE"])))
+
+
+def _serve_api_key(database: Path) -> str:
+    """Return the stored API key, creating one on the first serve."""
+    import secrets
+
+    from pulseguard.storage import SqliteRepository
+
+    with SqliteRepository(database) as repo:
+        stored = repo.get_setting("api_key")
+        if isinstance(stored, str) and stored:
+            return require_api_key_value(stored)
+        generated = secrets.token_urlsafe(18).replace("-", "a").replace("_", "b")
+        if len(generated) < 16:
+            generated = f"{generated}examplekey"
+        repo.set_setting("api_key", generated[:128])
+        return require_api_key_value(generated[:128])
+
+
+def _live_heartbeat(token: str, book: dict[str, HeartbeatCheck]) -> HeartbeatCheck | None:
+    """Prefer the scheduler's heartbeat so a catalog edit is the one that is pinged."""
+    if _TOKEN_RE.fullmatch(token) is None:
+        return None
+    engine = current_app.config.get("ENGINE")
+    if engine is not None:
+        found = engine.heartbeat_for(token)
+        if isinstance(found, HeartbeatCheck):
+            return found
+    return book.get(token)
 
 
 def _index_heartbeats(checks: Sequence[HeartbeatCheck]) -> dict[str, HeartbeatCheck]:
