@@ -7,27 +7,48 @@ pulseguard serve
 
 Open the browser page, create the admin account, and add monitors from there. `./start.sh` does the same steps.
 
+## Try it in 2 minutes
+
+```sh
+python tools/lab.py
+```
+
+In another terminal, run `pulseguard serve`, create the admin account, and choose **Load demo monitors**. The lab listens on `127.0.0.1:8799` (a page whose body is `Acme Shop`) and `127.0.0.1:8798` (a TCP port that accepts a connection and closes it). Open `http://127.0.0.1:8799/control` to switch that page to UP, DOWN, or DEFACED, or to send a heartbeat ping.
+
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.0.0 serves the status page, the admin login, the JSON API, the desktop window, and a container. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.1.0 adds `pulseguard serve`: first-run setup and the signed-in pages for monitors, incidents, certificates, alerts, SLA, agents, and backups. `run`, `web`, `check`, `console`, `export`, `backup`, and `push` are unchanged. An optional latency scorer flags a slow sample. Nothing runs a nightly backup, a retention purge, or a timed digest.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+![Add a monitor](docs/screenshots/add-monitor.png)
+
+![Monitor detail](docs/screenshots/monitor-detail.png)
+
+![Incidents](docs/screenshots/incidents.png)
+
+![Alerts](docs/screenshots/alerts.png)
+
+![SLA calculator](docs/screenshots/sla.png)
 
 ## What works now
 
 - `pulseguard check` loads every kind from JSON through the check registry and runs it once. The result is a JSON array.
 - HTTP status, keyword, defacement hash, TCP connect, DNS, TLS certificate expiry, and heartbeat grace.
 - Keyword search uses BeautifulSoup on the page. `script` and `style` tags are removed before the search. The parser is the stdlib `html.parser`.
-- Defacement matches that same visible text, then hashes the raw response bytes. Repeated mismatches stay at warning until `alert_after` (default 3), then become critical. The streak stays on the check instance. Incident state is separate and also stays in the process.
+- Defacement matches that same visible text, then hashes the raw response bytes. Repeated mismatches stay at warning until `alert_after` (default 3), then become critical. The streak stays on the check instance. An open incident is stored in the database and is still open after a restart.
 - TLS reads `notAfter` and alerts inside the 30, 14, 7, 3, and 1 day windows.
-- A heartbeat target is an unguessable token. `pulseguard web` calls `record_ping` from `/ping/<token>` on the same objects the scheduler runs. The token is not copied into the result or the access log. A ping is remembered until that process exits.
+- A heartbeat target is an unguessable token. `pulseguard web` calls `record_ping` from `/ping/<token>` on the same objects the scheduler runs. The token is not copied into the result or the access log. `pulseguard serve` also stores the last ping time, so a restart does not forget it.
 - `pulseguard check --db history.db` stores that run in SQLite. Without `--db`, the command only prints JSON.
 - `pulseguard run --config monitors.json --db history.db --duration 30` schedules those checks and shuts the threads down when the duration ends. Omit `--duration` to run until interrupted. A full job queue defers work instead of growing. The SQLite file is opened on the writer thread.
 - An incident opens after 3 consecutive failures and resolves after 1 consecutive success. It cannot close before it opens. `depends_on` suppresses a failing monitor when a dependency is already down. Opening and resolving each write one INFO log that names the monitor. A failure while the incident is already open does not log or mail again.
 - When `PULSEGUARD_SMTP_HOST` is set, `pulseguard run` sends one email for the open and one for the resolve. An empty host sends nothing. `EmailNotifier.send_digest()` sends the queued lines as one message; `run` does not call it on a timer.
 - `pulseguard run --evidence-dir DIR` writes a CSV, JSON, and text timeline when an incident opens. The deadline is 6 hours after the open. Rows older than 180 days are left out. The pack says it is not legal advice.
-- `pulseguard export` writes stored results or the monitor catalog as CSV or JSON. `import-monitors` loads a catalog CSV. `run` reads the JSON file, not the catalog table.
+- `pulseguard export` writes stored results or the monitor catalog as CSV or JSON. `import-monitors` loads a catalog CSV. `pulseguard run` and `pulseguard web` still read the JSON file. `pulseguard serve` schedules the catalog table and reloads it about once a second, so an add, edit, pause, or delete applies without a restart.
 - `pulseguard backup` writes a SQLite snapshot with a SHA-256 header, and can verify or restore it. That header is `PGDB`. Agent frames use a different header, `PGAG`.
 - `pulseguard run --agent-listen 127.0.0.1:9700` starts a collector on a loopback or private IPv4 address. It needs `PULSEGUARD_AGENT_TOKEN`. Each connection sends one result. A bad frame closes that connection, and the collector keeps listening. Accepted results go through the same writer as local checks. `pulseguard push` sends one result and does not probe a URL. Close the client with a context manager; `__del__` only covers a socket that was left open.
 - `pulseguard web --config monitors.json --db history.db` serves the status page on `127.0.0.1:8080` and runs the checks in the same process. The public page and `GET /api/status` read stored rows. They do not contact monitor targets, and they do not show catalog targets. `POST /api/monitors` requires `X-API-Key`. Admin pages use a session login and a CSRF token. The password is hashed with PBKDF2-HMAC-SHA256 for 100000 iterations.
+- `pulseguard serve` creates `./data`, the SQLite file, and a secret file (mode 0600) on first run. It opens the browser unless `--no-browser` is set, and it refuses `0.0.0.0`. The signed-in pages cover monitors, incidents, certificates, alerts, SLA, agents, export, and backup. Run check now is an explicit POST. No other page fetches a monitor URL.
 - `pulseguard console --db history.db` opens the desktop window. A loader thread queues snapshots. `after()` applies them, and widget calls raise if they are not on the main thread. The SLA form uses the same error-budget helper as the stored rollups.
 - `ConsoleNotifier.send` and `EmailNotifier.send` are the notifier implementations.
 - `pulseguard.ml.anomaly.detect` flags a latency sample that sits above a fixed multiple of the median absolute deviation. `detect_in_process` runs that score in a worker process. The series is data you already have. The function does not contact a host.
@@ -117,7 +138,7 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.0.0 tag notes.
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.0 tag notes.
 
 ## Container
 
@@ -147,5 +168,5 @@ Run the script again for a new measurement. Those seconds belong to that run.
 
 Admin writes need a session and a CSRF token, or `X-API-Key` for `POST /api/monitors`. The public page reads stored rows. Details are in `docs/security.md`.
 
-Still ahead: a nightly verified backup, a retention purge, and a timed digest. Hostnames are still not resolved during validation.
+Still ahead: a nightly verified backup, a retention purge, a timed digest, an importlib plugin loader, `/health`, and `/metrics`. Hostnames are still not resolved during validation.
 

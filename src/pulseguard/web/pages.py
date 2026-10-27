@@ -385,7 +385,15 @@ def register_pages(app: Flask) -> None:
                 error = str(exc)
         with _repository() as repo:
             names = [record.name for record in repo.monitors()]
-        return _page("sla.html", names=names, result=result, error=error)
+        return _page(
+            "sla.html",
+            names=names,
+            result=result,
+            error=error,
+            successes=request.form.get("successes", ""),
+            total=request.form.get("total", ""),
+            target=request.form.get("target", "0.99") or "0.99",
+        )
 
     @app.route("/agents", methods=["GET", "POST"])
     def agents() -> str | RedirectResponse | tuple[str, int]:

@@ -9,11 +9,11 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
   <input type="hidden" name="source" value="typed" />
   <label for="successes">Successes</label>
-  <input id="successes" name="successes" />
+  <input id="successes" name="successes" value="{{ successes }}" />
   <label for="total">Total</label>
-  <input id="total" name="total" />
+  <input id="total" name="total" value="{{ total }}" />
   <label for="target">Target</label>
-  <input id="target" name="target" value="0.99" />
+  <input id="target" name="target" value="{{ target }}" />
   <p><button type="submit">Calculate</button></p>
 </form>
 <h2>From my data</h2>
