@@ -344,8 +344,8 @@ th { font-size: var(--text-sm); color: var(--muted); }
 }
 
 .layout { display: grid; grid-template-columns: 1fr 280px; gap: var(--space-4); align-items: start; }
-.uptime-bar { display: flex; gap: 1px; height: 14px; margin: var(--space-2) 0; }
-.seg { flex: 1; min-width: 0; background: var(--line); border-radius: 1px; }
+.uptime-bar { display: flex; width: 100%; max-width: 100%; gap: 1px; height: 14px; margin: var(--space-2) 0; overflow: hidden; }
+.seg { flex: 1 1 0; width: 0; min-width: 0; background: var(--line); border-radius: 1px; }
 .seg.up { background: var(--ok); }
 .seg.down { background: var(--danger); }
 .spark { width: 100%; height: 2.2rem; }
@@ -490,6 +490,11 @@ meter { width: 8rem; height: 0.7rem; vertical-align: middle; margin-left: var(--
   max-width: 26rem;
   margin: 10vh auto;
   padding: var(--space-6);
+}
+.public {
+  max-width: 52rem;
+  margin: var(--space-6) auto;
+  padding: 0 var(--space-4) var(--space-7);
 }
 
 @keyframes rise {

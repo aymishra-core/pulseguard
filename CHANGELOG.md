@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 - 2026-10-27
+
+The browser console uses one design system: semantic colours, a 4 px spacing scale, light and dark themes, and a sidebar shell. Times are shown in the browser's local zone. A gap longer than three intervals is stored as "no data", left out of uptime, and the first failure after it is not an outage trigger.
+
+- `POST /monitors/probe` runs one unsaved check from the Add monitor form. It requires a login and CSRF, and it is rate limited.
+- The public status page shows a 90-day uptime bar and incident titles and times. Unknown routes render a branded 404, 403, or 500 with a way back.
+- The latency chart is still the stored polyline. It does not offer a 1 hour / 24 hour / 7 day / 30 day range, a hover crosshair, p50 and p95 lines, or failure ticks. KPI numbers do not count up. The command palette jumps to pages and monitors. It does not run every check at once.
+- A nightly backup, a retention purge, a timed digest, an importlib plugin loader, `/health`, and `/metrics` are not included.
+
 ## 1.1.2 - 2026-10-27
 
 - The test lab is a separate program. PulseGuard no longer creates demo monitors or mentions the lab.

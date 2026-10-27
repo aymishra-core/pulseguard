@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ code }} · PulseGuard</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon-unknown.svg') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
+  </head>
+  <body>
+    <main class="panel auth">
+      <p class="kind">PulseGuard</p>
+      <h1>{{ title }}</h1>
+      <p>{{ detail }}</p>
+      <p><a class="button" href="{{ url_for('status_page') }}">Back to PulseGuard</a></p>
+    </main>
+  </body>
+</html>

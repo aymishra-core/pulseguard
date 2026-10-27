@@ -26,19 +26,49 @@ On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**.
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.1.2 keeps the test lab as its own program. PulseGuard only monitors what you type into Add monitor. A defacement check can learn the SHA-256 of the first successful response, or you can type the hash. A heartbeat monitor shows its ping URL and token after you save it. Version 1.1.1 opens `pulseguard serve` at `/`, which goes to setup, login, or the dashboard. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.2.0 is the browser console redesign. The type is a system sans, light and dark follow the system until you toggle them, and a quiet period longer than three intervals is shown as no data instead of a false outage. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-![Add a monitor](docs/screenshots/add-monitor.png)
+![Dashboard, dark](docs/screenshots/dashboard-dark.png)
 
 ![Monitor detail](docs/screenshots/monitor-detail.png)
+
+![Monitor detail, dark](docs/screenshots/monitor-detail-dark.png)
+
+![Add a monitor, kind](docs/screenshots/add-monitor.png)
+
+![Add a monitor, details](docs/screenshots/add-monitor-details.png)
+
+![Add a monitor, review](docs/screenshots/add-monitor-review.png)
 
 ![Incidents](docs/screenshots/incidents.png)
 
 ![Alerts](docs/screenshots/alerts.png)
 
+![Certificates](docs/screenshots/certificates.png)
+
 ![SLA calculator](docs/screenshots/sla.png)
+
+![Public status](docs/screenshots/status.png)
+
+![Public status, dark](docs/screenshots/status-dark.png)
+
+![Sign in](docs/screenshots/login.png)
+
+![Sign in, dark](docs/screenshots/login-dark.png)
+
+![Add a monitor, kind, dark](docs/screenshots/add-monitor-dark.png)
+
+![Incidents, dark](docs/screenshots/incidents-dark.png)
+
+![Alerts, dark](docs/screenshots/alerts-dark.png)
+
+![Certificates, dark](docs/screenshots/certificates-dark.png)
+
+![SLA calculator, dark](docs/screenshots/sla-dark.png)
+
+Live dashboard frames: [1](docs/screenshots/dashboard-live-1.png), [2](docs/screenshots/dashboard-live-2.png), [3](docs/screenshots/dashboard-live-3.png).
 
 ## What works now
 
@@ -147,7 +177,7 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.1.2 tag notes.
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, `docs/design-system.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.2.0 tag notes.
 
 ## Container
 

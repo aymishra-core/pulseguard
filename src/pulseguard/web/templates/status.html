@@ -1,40 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-dot="{{ dot }}" data-headline="{{ headline }}">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PulseGuard status</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon-' + dot + '.svg') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
   </head>
   <body>
-    <p class="note">
-      This page reads stored results. It does not contact the monitored targets.
-    </p>
-    {% if serve %}
-    <p><a href="{{ url_for('console_login') }}">Sign in</a></p>
-    {% else %}
-    <p><a href="{{ url_for('login_form') }}">Admin</a></p>
-    {% endif %}
-    <table>
-      <thead>
-        <tr>
-          <th>Monitor</th>
-          <th>Kind</th>
-          <th>State</th>
-          <th>Message</th>
-          <th>Checked</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td>{{ row.name }}</td>
-          <td>{{ row.kind }}</td>
-          <td>{% if row.ok is none %}unknown{% elif row.ok %}up{% else %}down{% endif %}</td>
-          <td>{{ row.message }}</td>
-          <td>{{ row.checked_at }}</td>
-        </tr>
+    <main class="public">
+      <header class="top">
+        <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> {{ headline }}</p>
+        <div class="spacer"></div>
+        <button type="button" class="btn-secondary" id="theme-toggle" aria-pressed="false">Theme</button>
+        {% if serve %}
+        <a href="{{ url_for('console_login') }}">Sign in</a>
+        {% else %}
+        <a href="{{ url_for('login_form') }}">Admin</a>
+        {% endif %}
+      </header>
+      <p class="note">This page reads stored results. It does not contact the monitored targets.</p>
+      {% if updated %}<p>Last updated <time datetime="{{ updated }}">{{ updated }}</time></p>{% endif %}
+      {% if not rows %}
+      <p class="empty">No monitors yet.</p>
+      {% else %}
+      {% for row in rows %}
+      <article class="panel">
+        <h2>{{ row.name }} <span class="pill {{ 'unknown' if row.ok is none else ('up' if row.ok else 'down') }}">{% if row.ok is none %}unknown{% elif row.ok %}up{% else %}down{% endif %}</span></h2>
+        <p class="kind">{{ row.kind }}</p>
+        <p>{{ row.message }}</p>
+        <div class="uptime-bar" aria-label="90 day uptime for {{ row.name }}">
+          {% for label in bars[row.name] %}
+          <span class="seg {{ label }}" data-tooltip="{% if label == 'gap' or label == 'empty' %}no data{% else %}{{ label }}{% endif %}"></span>
+          {% endfor %}
+        </div>
+        {% if row.checked_at %}<p>Checked <time datetime="{{ row.checked_at }}">{{ row.checked_at }}</time></p>{% endif %}
+      </article>
+      {% endfor %}
+      {% endif %}
+      <h2>Recent incidents</h2>
+      {% if not history %}
+      <p class="empty">No recent incidents.</p>
+      {% else %}
+      <ul class="timeline">
+        {% for item in history %}
+        <li>{{ item.title }} · <time datetime="{{ item.started }}">{{ item.started }}</time>{% if item.ended %} to <time datetime="{{ item.ended }}">{{ item.ended }}</time>{% endif %}</li>
         {% endfor %}
-      </tbody>
-    </table>
+      </ul>
+      {% endif %}
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

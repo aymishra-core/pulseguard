@@ -39,8 +39,11 @@ def test_public_status_reads_storage_and_hides_the_target(
     page = client.get("/")
     payload = client.get("/api/status")
     assert page.status_code == 200
-    assert "HTTP 200" in page.get_data(as_text=True)
-    assert "secret.example" not in page.get_data(as_text=True)
+    text = page.get_data(as_text=True)
+    assert "HTTP 200" in text
+    assert "All systems operational" in text
+    assert "No recent incidents" in text
+    assert "secret.example" not in text
     assert "has<tag>" not in page.get_data(as_text=True)
     assert page.headers["Content-Security-Policy"] == "default-src 'self'"
     body = payload.get_json()
@@ -48,6 +51,25 @@ def test_public_status_reads_storage_and_hides_the_target(
     assert body["monitors"][0]["message"] == "HTTP 200"
     assert "target" not in body["monitors"][0]
     assert "secret.example" not in payload.get_data(as_text=True)
+
+
+def test_missing_pages_use_a_branded_error(tmp_path: Path) -> None:
+    """An unknown page, a forbidden page, and a server error each offer a way back."""
+    from werkzeug.exceptions import Forbidden, InternalServerError
+
+    client = _app(tmp_path / "history.db").test_client()
+    missing = client.get("/missing-page")
+    assert missing.status_code == 404
+    assert b"Page not found" in missing.data
+    assert b"Back to PulseGuard" in missing.data
+    app = _app(tmp_path / "other.db")
+    with app.test_request_context("/blocked"):
+        denied = app.handle_http_exception(Forbidden())
+        broken = app.handle_http_exception(InternalServerError())
+    assert denied[1] == 403
+    assert "Not allowed" in denied[0]
+    assert broken[1] == 500
+    assert "Something went wrong" in broken[0]
 
 
 def test_write_api_requires_the_key_and_omits_the_target(

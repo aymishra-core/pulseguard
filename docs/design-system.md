@@ -20,4 +20,6 @@ Layers are `--z-nav` (20), `--z-toast` (40), `--z-palette` (50), and `--z-modal`
 
 ## Components
 
-These classes are the shared controls: `button` / `.btn` (primary), `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.is-loading`, inputs and selects, checkboxes, `.pill`, `.card`, `.stat`, tables, `.segmented`, `.toast`, `.empty`, `.skeleton`, `.progress`, `kbd`, `[data-tooltip]`, and `dialog`. The sidebar, top bar, and command palette (`Ctrl` or `Cmd`+`K`) are in `base.html`.
+These classes are the shared controls: `button` / `.btn` (primary), `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.is-loading`, inputs and selects, checkboxes, `.pill`, `.card`, `.stat`, tables, `.segmented`, `.toast`, `.banner`, `.empty`, `.skeleton`, `.progress`, `meter`, `kbd`, `[data-tooltip]`, and `dialog`. The sidebar, top bar, and command palette (`Ctrl` or `Cmd`+`K`) are in `base.html`.
+
+`.kind-cards` are the check-kind choices on Add monitor. `.timeline` is the incident history. `.uptime-bar` with `.seg` is the 90-slice history, including grey `.gap` and empty slices for missing data. `.public` is the signed-out status page. `.auth` is login, setup, and the branded error page.

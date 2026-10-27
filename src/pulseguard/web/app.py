@@ -21,6 +21,7 @@ from flask import (
 from werkzeug.wrappers import Response as RedirectResponse
 
 from pulseguard.checks.heartbeat import HeartbeatCheck
+from pulseguard.checks.models import CheckResult, utc_now
 from pulseguard.exceptions import ConfigValidationError, PulseGuardError
 from pulseguard.storage import SqliteRepository
 from pulseguard.web.auth import (
@@ -38,6 +39,7 @@ from pulseguard.web.auth import (
     require_api_key_value,
     require_secret_key,
 )
+from pulseguard.web.board import segments
 from pulseguard.web.forms import monitor_from_payload, parse_enabled, parse_monitor_name
 from pulseguard.web.status import latest_status
 
@@ -108,6 +110,20 @@ def _register(app: Flask) -> None:
             return jsonify({"error": str(exc)}), 400
         return str(exc), 400
 
+    @app.errorhandler(404)
+    def _missing(_exc: Exception) -> tuple[str, int]:
+        if request.path.startswith("/api/") or request.path.startswith("/ping/"):
+            return "not found", 404
+        return _error_page(404, "Page not found", "That address is not a PulseGuard page.")
+
+    @app.errorhandler(403)
+    def _forbidden(_exc: Exception) -> tuple[str, int]:
+        return _error_page(403, "Not allowed", "You cannot open that page.")
+
+    @app.errorhandler(500)
+    def _broken(_exc: Exception) -> tuple[str, int]:
+        return _error_page(500, "Something went wrong", "Go back and try the page again.")
+
     @app.get("/")
     def status_page() -> str | RedirectResponse | tuple[str, int]:
         if app.config.get("SERVE"):
@@ -120,11 +136,47 @@ def _register(app: Flask) -> None:
 
     def _public_board() -> str | tuple[str, int]:
         monitor = request.args.get("monitor")
+        now = utc_now()
         with _repository() as repo:
             if repo.get_setting("public_status") == "0":
                 return render_template("status_off.html"), 404
             rows = latest_status(repo, monitor=monitor)
-        return render_template("status.html", rows=rows, serve=bool(app.config.get("SERVE")))
+            grouped: dict[str, list[CheckResult]] = {}
+            for result in repo.iter_results(None):
+                grouped.setdefault(result.monitor, []).append(result)
+            history = [
+                {
+                    "title": f"{item.monitor} {item.state}",
+                    "started": item.started_at,
+                    "ended": item.ended_at,
+                }
+                for item in repo.incidents()[:12]
+            ]
+        bars = {
+            row.name: segments(grouped.get(row.name, []), now, hours=24 * 90, parts=90)
+            for row in rows
+        }
+        downs = sum(1 for row in rows if row.ok is False)
+        if not rows:
+            headline, dot = "No monitors yet", "unknown"
+        elif downs:
+            noun = "monitor" if downs == 1 else "monitors"
+            headline, dot = f"{downs} {noun} down", "down"
+        elif all(row.ok is None for row in rows):
+            headline, dot = "Waiting for the first checks", "unknown"
+        else:
+            headline, dot = "All systems operational", "up"
+        checked = [row.checked_at for row in rows if row.checked_at]
+        return render_template(
+            "status.html",
+            rows=rows,
+            bars=bars,
+            history=history,
+            headline=headline,
+            dot=dot,
+            updated=max(checked) if checked else "",
+            serve=bool(app.config.get("SERVE")),
+        )
 
     @app.get("/api/status")
     def status_json() -> Response:
@@ -217,6 +269,11 @@ def _register(app: Flask) -> None:
 def _repository() -> SqliteRepository:
     """Open a connection for this request. The caller closes it."""
     return SqliteRepository(Path(str(current_app.config["DATABASE"])))
+
+
+def _error_page(code: int, title: str, detail: str) -> tuple[str, int]:
+    """Render a branded error page with a way back."""
+    return render_template("error.html", code=code, title=title, detail=detail), code
 
 
 def _serve_home() -> RedirectResponse:

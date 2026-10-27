@@ -73,3 +73,24 @@ def test_static_files_stay_inside_the_size_budget() -> None:
     """CSS stays under 60 KB and JavaScript under 90 KB, uncompressed."""
     assert _CSS.stat().st_size < 60_000
     assert _JS.stat().st_size < 90_000
+
+
+def test_templates_and_static_files_do_not_name_remote_hosts() -> None:
+    """Templates and static files do not contain a URL the browser would fetch.
+
+    The SVG namespace is allowed because a browser does not request it.
+    Localhost and license files are the other exceptions.
+    """
+    root = _CSS.parents[1]
+    pattern = re.compile(r"https?://[^\s\"')<]+")
+    allowed = ("http://www.w3.org/2000/svg", "http://127.0.0.1", "http://localhost")
+    found: list[str] = []
+    for folder in ("templates", "static"):
+        for path in (root / folder).rglob("*"):
+            if path.suffix not in {".html", ".css", ".js", ".svg"}:
+                continue
+            for match in pattern.findall(path.read_text(encoding="utf-8")):
+                if match.startswith(allowed) or "license" in path.as_posix():
+                    continue
+                found.append(f"{path.name}: {match}")
+    assert found == []

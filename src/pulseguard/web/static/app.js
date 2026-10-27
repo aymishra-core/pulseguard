@@ -168,7 +168,8 @@
     radio.addEventListener("change", showBaseline);
   });
   showBaseline();
-  var monitorForm = document.querySelector("form");
+  var named = document.querySelector("#name");
+  var monitorForm = named ? named.form : null;
   var probeButton = document.querySelector("#probe");
   var probeResult = document.querySelector("#probe-result");
   var schemeOffer = document.querySelector("#scheme-offer");
@@ -457,8 +458,83 @@
     if (kindFilter) kindFilter.value = readStore("pulseguard-kind");
   }
 
+  function paintShell(body, counts) {
+    var down = Number(counts.down || 0);
+    var up = Number(counts.up || 0);
+    var open = Number(body.open_incidents || 0);
+    var dot = "unknown";
+    var line = "Waiting for the first checks";
+    var detail = "Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.";
+    if (down === 1) { dot = "down"; line = "1 monitor down"; }
+    else if (down > 1) { dot = "down"; line = down + " monitors down"; }
+    else if (up > 0) {
+      dot = "up";
+      line = "All systems operational";
+      detail = "Every enabled monitor answered its last check.";
+    } else if (Number(counts.paused || 0) > 0) {
+      dot = "paused";
+      line = "All monitors are paused";
+    }
+    var headline = document.querySelector("#headline");
+    var pill = document.querySelector(".headline .pill");
+    var ring = document.querySelector("#hero-ring");
+    var title = document.querySelector("#hero-title");
+    if (headline) headline.textContent = line;
+    if (pill) { pill.className = "pill " + dot; pill.textContent = dot; }
+    if (ring) ring.className = "ring " + dot;
+    if (title) {
+      title.textContent = open
+        ? open + (open === 1 ? " incident ongoing" : " incidents ongoing")
+        : line;
+      if (title.nextElementSibling) {
+        title.nextElementSibling.textContent = open
+          ? "Open the incident to see what failed and what to check."
+          : detail;
+      }
+    }
+    if (dot === "down") document.title = "(" + down + " down) " + document.title.replace(/^\(\d+ down\) /, "");
+    else document.title = document.title.replace(/^\(\d+ down\) /, "");
+    var icon = document.querySelector("link[rel='icon']");
+    if (icon && icon.getAttribute("href")) {
+      icon.setAttribute("href", icon.getAttribute("href").replace(/favicon-[a-z]+\.svg/, "favicon-" + dot + ".svg"));
+    }
+    var banner = document.querySelector(".banner");
+    var main = document.querySelector(".main");
+    if (open && main) {
+      if (!banner) {
+        banner = document.createElement("p");
+        banner.className = "banner";
+        banner.setAttribute("role", "status");
+        main.insertBefore(banner, main.querySelector("main"));
+      }
+      banner.textContent = "";
+      banner.appendChild(document.createTextNode(open + (open === 1 ? " open incident. " : " open incidents. ")));
+      var see = document.createElement("a");
+      see.href = "/incidents";
+      see.textContent = "See what to check";
+      banner.appendChild(see);
+    } else if (banner) {
+      banner.remove();
+    }
+    document.querySelectorAll(".nav a").forEach(function (link) {
+      if (link.getAttribute("href") !== "/incidents") return;
+      var badge = link.querySelector(".badge");
+      if (!open) {
+        if (badge) badge.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "badge";
+        link.appendChild(badge);
+      }
+      badge.textContent = String(open);
+    });
+  }
+
   function paint(body) {
     var counts = body.counts || {};
+    paintShell(body, counts);
     document.querySelectorAll(".summary article").forEach(function (article) {
       var title = article.querySelector("h2");
       var value = article.querySelector("p");
