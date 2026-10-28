@@ -1,8 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ record.name }}{% endblock %}
-{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>{{ record.name }}</span>{% endblock %}
+{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('monitor_detail', name=record.name) }}">{{ record.name }}</a>{% endblock %}
 {% block page %}
 {% set icon = {'http':'globe','keyword':'search','defacement':'eye','tcp':'plug','dns':'at','tls':'shield','heartbeat':'heart'}.get(record.kind, 'pulse') %}
+{% set ordered = nav_items|sort(attribute='name') %}
+{% set ns = namespace(i=0) %}
+{% for item in ordered %}{% if item.name == record.name %}{% set ns.i = loop.index0 %}{% endif %}{% endfor %}
+<div class="dhead-nav">
+<a class="btn btn-sm btn-ghost" href="{{ url_for('monitor_list') }}">Back to monitors</a>
+{% if ns.i > 0 %}<a class="icon-btn" href="{{ url_for('monitor_detail', name=ordered[ns.i - 1].name) }}" aria-label="Previous monitor"><svg class="i flip" aria-hidden="true"><use href="#chev"/></svg></a>{% endif %}
+<label class="sr" for="monitor-switch">Switch monitor</label>
+<select id="monitor-switch" data-switcher>
+{% for item in ordered %}<option value="{{ url_for('monitor_detail', name=item.name) }}" {% if item.name == record.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+</select>
+{% if ns.i + 1 < ordered|length %}<a class="icon-btn" href="{{ url_for('monitor_detail', name=ordered[ns.i + 1].name) }}" aria-label="Next monitor"><svg class="i" aria-hidden="true"><use href="#chev"/></svg></a>{% endif %}
+</div>
 <div class="dhead">
 <span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#{{ icon }}"/></svg></span>
 <div class="grow">

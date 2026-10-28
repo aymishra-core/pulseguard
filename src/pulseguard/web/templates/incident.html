@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}INC-{{ '%04d'|format(row.id) }}{% endblock %}
-{% block crumb %}<a href="{{ url_for('incident_list') }}">Incidents</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>INC-{{ '%04d'|format(row.id) }}</span>{% endblock %}
+{% block crumb %}<a href="{{ url_for('incident_list') }}">Incidents</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('incident_detail', incident_id=row.id) }}">INC-{{ '%04d'|format(row.id) }}</a>{% endblock %}
 {% block page %}
 <div class="head">
 <div>

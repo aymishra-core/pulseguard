@@ -15,10 +15,22 @@
 <span class="brand-mark"><svg class="i i-lg" aria-hidden="true"><use href="#pulse"/></svg></span>
 <div><b>PulseGuard</b><small>Uptime console</small></div>
 </div>
+<a class="btn btn-primary side-add" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg><span>Add monitor</span></a>
 <div class="nav-label">Monitor</div>
 <nav class="nav" aria-label="Monitor">
 <a href="{{ url_for('dashboard') }}" {% if nav == 'dashboard' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#grid"/></svg><span>Dashboard</span></a>
-<a href="{{ url_for('monitor_list') }}" {% if nav == 'monitors' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#activity"/></svg><span>Monitors</span></a>
+<div class="nav-mons" data-nav-mons>
+<div class="nav-row">
+<a href="{{ url_for('monitor_list') }}" {% if nav == 'monitors' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#activity"/></svg><span>Monitors</span>{% if nav_failing %}<span class="badge">{{ nav_failing }}</span>{% endif %}</a>
+<button class="nav-toggle" type="button" data-nav-toggle aria-expanded="true" aria-label="Show monitors"><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg></button>
+</div>
+<div class="nav-mon-list">
+{% for item in nav_items[:8] %}
+<a class="nav-mon" href="{{ url_for('monitor_detail', name=item.name) }}"><span class="dot-s {{ item.dot }}"></span><span>{{ item.name }}</span></a>
+{% endfor %}
+{% if nav_items|length > 8 %}<a class="nav-mon" href="{{ url_for('monitor_list') }}"><span>View all</span></a>{% endif %}
+</div>
+</div>
 <a href="{{ url_for('incident_list') }}" {% if nav == 'incidents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#alert"/></svg><span>Incidents</span>{% if nav_incidents %}<span class="badge">{{ nav_incidents }}</span>{% endif %}</a>
 <a href="{{ url_for('certificates') }}" {% if nav == 'certificates' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#shield"/></svg><span>Certificates</span>{% if nav_certs %}<span class="badge warn">{{ nav_certs }}</span>{% endif %}</a>
 <a href="{{ url_for('alerts') }}" {% if nav == 'alerts' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#bell"/></svg><span>Alerts</span></a>
@@ -29,9 +41,9 @@
 <a href="{{ url_for('agents') }}" {% if nav == 'agents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#server"/></svg><span>Agents</span></a>
 <a href="{{ url_for('data_page') }}" {% if nav == 'data' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#db"/></svg><span>Data</span></a>
 <a href="{{ url_for('settings') }}" {% if nav == 'settings' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#cog"/></svg><span>Settings</span></a>
-<a href="{{ url_for('help_page') }}" {% if nav == 'help' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#help"/></svg><span>Help</span></a>
 </nav>
 <div class="side-foot">
+<a href="{{ url_for('help_page') }}" {% if nav == 'help' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#help"/></svg><span>Help</span></a>
 <a href="{{ url_for('status_page') }}"><svg class="i" aria-hidden="true"><use href="#globe"/></svg><span>Public status</span></a>
 <button class="collapse-btn" type="button" data-collapse><svg class="i" aria-hidden="true"><use href="#chevs"/></svg><span>Collapse</span></button>
 </div>
@@ -41,24 +53,24 @@
 <button class="icon-btn menu-btn" type="button" data-menu aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#menu"/></svg></button>
 <div class="crumb">{% block crumb %}<span>Dashboard</span>{% endblock %}</div>
 <span class="grow"></span>
-{% if nav_incidents %}
-<span class="chip down"><span class="dot"></span><span class="l">{{ nav_incidents }} incident{% if nav_incidents != 1 %}s{% endif %}</span></span>
-{% elif dot == 'down' %}
-<span class="chip down"><span class="dot"></span><span class="l">{{ headline }}</span></span>
-{% elif dot == 'up' %}
-<span class="chip up"><span class="dot"></span><span class="l">All up</span></span>
+{% if nav_failing %}
+<a class="chip down" href="{{ chip_href }}"><span class="dot"></span><span class="l">{{ nav_failing }} failing</span></a>
+{% elif nav_incidents %}
+<a class="chip warn" href="{{ url_for('incident_list', status='open') }}"><span class="dot"></span><span class="l">{{ nav_incidents }} open</span></a>
+{% elif nav_total %}
+<a class="chip {{ 'ok' if nav_healthy == nav_total else 'warn' }}" href="{{ url_for('monitor_list') }}"><span class="dot"></span><span class="l">{{ nav_healthy }}/{{ nav_total }} healthy</span></a>
 {% else %}
-<span class="chip warn"><span class="dot"></span><span class="l">{{ headline }}</span></span>
+<span class="chip warn"><span class="dot"></span><span class="l">Awaiting first sweep</span></span>
 {% endif %}
 <button class="jump" type="button" data-open="pal" aria-label="Search"><svg class="i i-sm" aria-hidden="true"><use href="#search"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button>
 <button class="icon-btn" id="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme"><svg class="i" aria-hidden="true"><use href="#sun"/></svg></button>
 <a class="avatar" href="{{ url_for('settings') }}" aria-label="Account">{{ user[:2]|upper }}</a>
 </header>
-{% if nav_incidents %}
+{% if nav_failing and banner_name %}
 <div class="banner" role="alert">
 <svg class="i" aria-hidden="true"><use href="#alert"/></svg>
-<span>{{ nav_incidents }} incident{% if nav_incidents != 1 %}s{% endif %} active{% if banner_name %}: {{ banner_name }}{% if banner_plain %}, {{ banner_plain }}{% endif %}{% endif %}</span>
-{% if banner_id %}<a href="{{ url_for('incident_detail', incident_id=banner_id) }}">Open incident <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>{% endif %}
+<span><a class="banner-name" href="{{ url_for('monitor_detail', name=banner_name) }}">{{ banner_name }}</a> failing{% if banner_plain %}: {{ banner_plain }}{% endif %}</span>
+<a href="{{ url_for('monitor_detail', name=banner_name) }}">Open monitor <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>
 </div>
 {% endif %}
 <main class="page">
@@ -70,23 +82,24 @@
 <div class="dlg pal">
 <div class="pal-in"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" placeholder="Jump to a page or monitor" aria-label="Jump to a page or monitor"></div>
 <ul class="pal-list" id="palette-list">
-<li><a href="{{ url_for('dashboard') }}"><svg class="i" aria-hidden="true"><use href="#grid"/></svg>Dashboard</a></li>
-<li><a href="{{ url_for('monitor_list') }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>Monitors</a></li>
-<li><a href="{{ url_for('incident_list') }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>Incidents</a></li>
-<li><a href="{{ url_for('certificates') }}"><svg class="i" aria-hidden="true"><use href="#shield"/></svg>Certificates</a></li>
-<li><a href="{{ url_for('alerts') }}"><svg class="i" aria-hidden="true"><use href="#bell"/></svg>Alerts</a></li>
-<li><a href="{{ url_for('sla') }}"><svg class="i" aria-hidden="true"><use href="#gauge"/></svg>SLA reports</a></li>
-<li><a href="{{ url_for('agents') }}"><svg class="i" aria-hidden="true"><use href="#server"/></svg>Agents</a></li>
-<li><a href="{{ url_for('data_page') }}"><svg class="i" aria-hidden="true"><use href="#db"/></svg>Data</a></li>
-<li><a href="{{ url_for('settings') }}"><svg class="i" aria-hidden="true"><use href="#cog"/></svg>Settings</a></li>
-<li><a href="{{ url_for('help_page') }}"><svg class="i" aria-hidden="true"><use href="#help"/></svg>Help</a></li>
-<li><a href="{{ url_for('status_page') }}"><svg class="i" aria-hidden="true"><use href="#globe"/></svg>Public status</a></li>
-{% for name in nav_names %}
-<li><a href="{{ url_for('monitor_detail', name=name) }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>{{ name }}</a></li>
+<li data-page="1"><a href="{{ url_for('dashboard') }}"><svg class="i" aria-hidden="true"><use href="#grid"/></svg>Dashboard<kbd>g d</kbd></a></li>
+<li data-page="1"><a href="{{ url_for('monitor_list') }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>Monitors<kbd>g m</kbd></a></li>
+<li data-page="1"><a href="{{ url_for('incident_list') }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>Incidents<kbd>g i</kbd></a></li>
+<li data-page="1"><a href="{{ url_for('certificates') }}"><svg class="i" aria-hidden="true"><use href="#shield"/></svg>Certificates<kbd>g c</kbd></a></li>
+<li data-page="1"><a href="{{ url_for('monitor_new') }}"><svg class="i" aria-hidden="true"><use href="#plus"/></svg>New monitor<kbd>n</kbd></a></li>
+<li data-page="1"><a href="{{ url_for('alerts') }}"><svg class="i" aria-hidden="true"><use href="#bell"/></svg>Alerts</a></li>
+<li data-page="1"><a href="{{ url_for('sla') }}"><svg class="i" aria-hidden="true"><use href="#gauge"/></svg>SLA reports</a></li>
+<li data-page="1"><a href="{{ url_for('agents') }}"><svg class="i" aria-hidden="true"><use href="#server"/></svg>Agents</a></li>
+<li data-page="1"><a href="{{ url_for('data_page') }}"><svg class="i" aria-hidden="true"><use href="#db"/></svg>Data</a></li>
+<li data-page="1"><a href="{{ url_for('settings') }}"><svg class="i" aria-hidden="true"><use href="#cog"/></svg>Settings</a></li>
+<li data-page="1"><a href="{{ url_for('help_page') }}"><svg class="i" aria-hidden="true"><use href="#help"/></svg>Help</a></li>
+<li data-page="1"><a href="{{ url_for('status_page') }}"><svg class="i" aria-hidden="true"><use href="#globe"/></svg>Public status</a></li>
+{% for item in nav_items %}
+<li><a href="{{ url_for('monitor_detail', name=item.name) }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>{{ item.name }}</a></li>
 {% endfor %}
-{% if banner_id %}
-<li><a href="{{ url_for('incident_detail', incident_id=banner_id) }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>Open incident</a></li>
-{% endif %}
+{% for row in nav_incident_rows %}
+<li><a href="{{ url_for('incident_detail', incident_id=row.id) }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>{{ row.label }} {{ row.monitor }}</a></li>
+{% endfor %}
 <li>
 <form method="post" action="{{ url_for('monitor_run_all') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -94,7 +107,7 @@
 </form>
 </li>
 </ul>
-<div class="pal-foot"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></div>
+<div class="pal-foot"><span>g d dashboard</span><span>g m monitors</span><span>g i incidents</span><span>g c certificates</span><span>n new monitor</span><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></div>
 </div>
 </div>
 <div class="toasts" aria-live="polite">{% if flash %}<div class="toast {{ flash_level }}" role="status">{{ flash }}</div>{% endif %}</div>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Monitors{% endblock %}
-{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Monitors</span>{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('monitor_list') }}">Monitors</a>{% endblock %}
 {% block page %}
 {% set total = counts.up + counts.down + counts.unknown + counts.paused %}
 {% set attn = counts.down + warns %}
@@ -9,16 +9,19 @@
 <div class="actions"><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
 <div class="toolbar">
-<div class="tabs" data-tabs="#mons">
-<button aria-selected="true" data-f="all">All {{ total }}</button>
-<button aria-selected="false" data-f="attn">Needs attention {{ attn }}</button>
-<button aria-selected="false" data-f="up">Up {{ counts.up }}</button>
+<div class="tabs" role="tablist">
+<a href="{{ url_for('monitor_list', sort=list_sort) if list_sort else url_for('monitor_list') }}" aria-selected="{{ 'true' if not list_status else 'false' }}">All {{ total }}</a>
+<a href="{{ url_for('monitor_list', status='attn', sort=list_sort) if list_sort else url_for('monitor_list', status='attn') }}" aria-selected="{{ 'true' if list_status == 'attn' else 'false' }}">Needs attention {{ attn }}</a>
+<a href="{{ url_for('monitor_list', status='up', sort=list_sort) if list_sort else url_for('monitor_list', status='up') }}" aria-selected="{{ 'true' if list_status == 'up' else 'false' }}">Up {{ counts.up }}</a>
+<a href="{{ url_for('monitor_list', status='down', sort=list_sort) if list_sort else url_for('monitor_list', status='down') }}" aria-selected="{{ 'true' if list_status == 'down' else 'false' }}">Down {{ counts.down }}</a>
 </div>
 <div class="search"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" data-search="#mons" placeholder="Search name or target…" aria-label="Search"></div>
 <select aria-label="Kind" data-kind-filter><option value="all">All kinds</option>{% for kind in ['http','keyword','defacement','tcp','dns','tls','heartbeat'] %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select>
 </div>
 {% if empty %}
 <section class="card"><div class="empty"><b>No monitors yet</b><p>Add your first monitor to start checking.</p><a class="btn btn-primary" href="{{ url_for('monitor_new') }}">Add monitor</a></div></section>
+{% elif not cards %}
+<section class="card"><div class="empty"><b>Nothing in this filter</b><p>No monitors match the current status.</p></div></section>
 {% else %}
 <section class="mons" id="mons">{% for card in cards %}{% include "_card.html" %}{% endfor %}</section>
 {% endif %}

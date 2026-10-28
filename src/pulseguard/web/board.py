@@ -113,12 +113,12 @@ def activity_lines(results: list[CheckResult], *, limit: int = 12) -> list[dict[
     grouped: dict[str, list[CheckResult]] = {}
     for result in results:
         grouped.setdefault(result.monitor, []).append(result)
-    events: list[tuple[datetime, str, str]] = []
+    events: list[tuple[datetime, str, str, str]] = []
     for name, rows in grouped.items():
         previous: bool | None = None
         for result in rows:
             if result.message == "monitoring gap":
-                events.append((result.checked_at, "unknown", f"{name} had no data"))
+                events.append((result.checked_at, "unknown", f"{name} had no data", name))
                 previous = None
                 continue
             if previous is None:
@@ -129,14 +129,14 @@ def activity_lines(results: list[CheckResult], *, limit: int = 12) -> list[dict[
                     text = f"{name} failed after a gap. Check the local network."
                 else:
                     text = f"{name} went down"
-                events.append((result.checked_at, "down", text))
+                events.append((result.checked_at, "down", text, name))
             elif (not previous) and result.ok:
-                events.append((result.checked_at, "up", f"{name} recovered"))
+                events.append((result.checked_at, "up", f"{name} recovered", name))
             previous = result.ok
     events.sort(key=lambda item: item[0], reverse=True)
     return [
-        {"at": moment.isoformat(), "state": state, "text": text}
-        for moment, state, text in events[:limit]
+        {"at": moment.isoformat(), "state": state, "text": text, "monitor": monitor}
+        for moment, state, text, monitor in events[:limit]
     ]
 
 
@@ -192,37 +192,47 @@ def dashboard_hero(
     """Return the dashboard hero. Only incidents on enabled monitors count."""
     catalog = list(records)
     found = dict(latest)
+    total = len(catalog)
     down = [record for record in catalog if monitor_state(record, found.get(record.name)) == "down"]
     if down:
-        return _down_hero(down, found, active)
+        return _down_hero(down, found, active, total)
     if active:
         return _waiting_hero(catalog, found, active)
     if catalog and all(not record.enabled for record in catalog):
         return _hero("paused", "", "#pause", "All monitors are paused")
-    if not catalog:
-        return _hero("neutral", "", "#plus", "Add your first monitor")
-    if not results_exist:
-        return _hero("neutral", "", "#clock", "Waiting for the first checks")
+    if not catalog or not results_exist:
+        return _hero("neutral", "", "#clock", "Awaiting first sweep", state="AWAITING FIRST SWEEP")
     ring = ring_state(catalog, found, 0)
+    title = _healthy_title(total)
     if ring == "warn":
-        return _hero("warn", "hero--warn", "#alert", "All systems operational")
-    return _hero("up", "hero--ok", "#check", "All systems operational")
+        return _hero("warn", "hero--warn", "#alert", title, state="DEGRADED")
+    return _hero("up", "hero--ok", "#check", title, state="NOMINAL")
+
+
+def _healthy_title(total: int) -> str:
+    """Return the nominal headline. One monitor stays singular."""
+    if total == 1:
+        return "All 1 monitor healthy"
+    return f"All {total} monitors healthy"
 
 
 def _down_hero(
     down: list[MonitorRecord],
     latest: dict[str, CheckResult],
     active: Sequence[IncidentRow],
+    total: int,
 ) -> dict[str, object]:
     """Danger hero for the monitors that are down right now."""
     first = down[0]
     result = latest.get(first.name)
     plain = "" if result is None else plain_message(result.message).rstrip(".")
-    title = "1 monitor is down" if len(down) == 1 else f"{len(down)} monitors are down"
+    failing = len(down)
+    state = "OUTAGE" if failing == total else "DEGRADED"
+    title = f"{failing} of {total} monitors failing"
     match = next((row for row in active if row.monitor == first.name), None)
     if match is None and active:
         match = min(active, key=lambda row: row.started_at)
-    view = _hero("down", "hero--danger", "#x", title, name=first.name, plain=plain)
+    view = _hero("down", "hero--danger", "#x", title, name=first.name, plain=plain, state=state)
     if match is not None:
         view["incident_id"] = match.id
         view["incident_since"] = match.started_at
@@ -241,8 +251,9 @@ def _waiting_hero(
         ring,
         "hero--warn",
         "#alert",
-        "Incident open, waiting for the next check",
+        "Incident open, awaiting next check",
         name=earliest.monitor,
+        state="DEGRADED",
     )
     view["incident_id"] = earliest.id
     view["incident_since"] = earliest.started_at
@@ -257,6 +268,7 @@ def _hero(
     *,
     name: str = "",
     plain: str = "",
+    state: str = "",
 ) -> dict[str, object]:
     """Return one hero description. ``incident_id`` stays 0 until a row is attached."""
     return {
@@ -264,6 +276,7 @@ def _hero(
         "hero_class": hero_class,
         "hero_icon": icon,
         "hero_title": title,
+        "hero_state": state,
         "hero_name": name,
         "hero_plain": plain,
         "incident_id": 0,
@@ -271,6 +284,31 @@ def _hero(
         "incident_name": name,
         "incident_plain": plain,
     }
+
+
+def short_span(start: datetime, now: datetime) -> str:
+    """Return a compact age such as ``14 m`` or ``2 d``."""
+    seconds = int((now - start).total_seconds())
+    if seconds < 0:
+        seconds = 0
+    if seconds < 60:
+        return f"{seconds} s"
+    minutes, _sec = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    if days:
+        return f"{days} d"
+    if hours:
+        return f"{hours} h"
+    return f"{minutes} m"
+
+
+def clock_hms(value: object) -> str:
+    """Return a UTC clock time for the sweep line. The browser localises it."""
+    moment = _moment(value)
+    if moment is None:
+        return "—"
+    return moment.astimezone(UTC).strftime("%H:%M:%S")
 
 
 def days_remaining(message: str, now: datetime) -> int | None:

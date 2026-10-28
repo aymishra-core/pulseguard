@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 - 2026-10-28
+
+A failing monitor is one click from the dashboard. The hero names the service state (nominal, degraded, outage, or awaiting the first sweep), the Needs attention list links each problem to its monitor and incident, and the sidebar, breadcrumbs, and command palette follow the same monitors.
+
 ## 1.3.1 - 2026-10-28
 
 Deleting, pausing, or disabling a monitor closes its open incidents. Startup and a catalog reload close any that remain for a monitor that is gone or disabled, one log line each. The incident page can close an open incident. The dashboard hero, the top-bar chip, the banner, and the Incidents badge count only incidents whose monitor is still running.

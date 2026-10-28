@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Incidents{% endblock %}
-{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Incidents</span>{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('incident_list') }}">Incidents</a>{% endblock %}
 {% block page %}
 <div class="head">
 <div><div class="eyebrow">Monitor</div><h1 class="title">Incidents</h1><p class="sub">Opened after repeated failures, resolved on the first success.</p></div>
 </div>
 <div class="tabs" role="tablist">
-<a class="btn btn-sm {% if tab == 'open' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', tab='open') }}">Open</a>
-<a class="btn btn-sm {% if tab == 'resolved' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', tab='resolved') }}">Resolved</a>
+<a class="btn btn-sm {% if tab == 'open' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', status='open') }}" aria-selected="{{ 'true' if tab == 'open' else 'false' }}">Open</a>
+<a class="btn btn-sm {% if tab == 'resolved' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', status='resolved') }}" aria-selected="{{ 'true' if tab == 'resolved' else 'false' }}">Resolved</a>
 </div>
 <section class="card tablewrap">
 <table>

@@ -59,6 +59,7 @@ from pulseguard.web.board import (
     activity_lines,
     certificate_band,
     clock,
+    clock_hms,
     dashboard_hero,
     days_remaining,
     hint_for,
@@ -68,6 +69,7 @@ from pulseguard.web.board import (
     monitor_state,
     plain_message,
     segments,
+    short_span,
     sparkline,
     stamp,
     uptime,
@@ -128,6 +130,28 @@ def register_pages(app: Flask) -> None:
             body = _dashboard_body(repo)
         return jsonify(_json_ready(body))
 
+    @app.get("/api/palette")
+    def palette_json() -> tuple[Response, int] | Response:
+        """Return pages, monitors, and incidents for the command palette."""
+        if _signed_in() is None:
+            return jsonify({"error": "login required"}), 401
+        with _repository() as repo:
+            monitors = [
+                {"name": record.name, "href": url_for("monitor_detail", name=record.name)}
+                for record in repo.monitors()
+            ]
+            incidents = [
+                {
+                    "id": row.id,
+                    "label": f"INC-{row.id:04d}",
+                    "monitor": row.monitor,
+                    "state": row.state,
+                    "href": url_for("incident_detail", incident_id=row.id),
+                }
+                for row in repo.incidents()[:20]
+            ]
+        return jsonify({"pages": _palette_pages(), "monitors": monitors, "incidents": incidents})
+
     @app.get("/api/activity")
     def activity_json() -> tuple[Response, int] | Response:
         if _signed_in() is None:
@@ -141,9 +165,19 @@ def register_pages(app: Flask) -> None:
         user = _need_user()
         if not isinstance(user, str):
             return user
+        status = request.args.get("status", "")
+        sort = request.args.get("sort", "")
         with _repository() as repo:
             body = _dashboard_body(repo)
-        return _page("monitors.html", **body)
+        cards = body.pop("cards")
+        shown, chosen, ordered = _filter_cards(cards, status, sort)
+        return _page(
+            "monitors.html",
+            cards=shown,
+            list_status=chosen,
+            list_sort=ordered,
+            **body,
+        )
 
     @app.route("/monitors/new", methods=["GET", "POST"])
     def monitor_new() -> str | RedirectResponse | tuple[str, int]:
@@ -334,7 +368,7 @@ def register_pages(app: Flask) -> None:
         user = _need_user()
         if not isinstance(user, str):
             return user
-        tab = request.args.get("tab", "open")
+        tab = request.args.get("status") or request.args.get("tab") or "open"
         if tab not in {"open", "resolved"}:
             tab = "open"
         with _repository() as repo:
@@ -985,6 +1019,9 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
                 "tone": tone,
                 "message": raw,
                 "plain": line,
+                "latency": None
+                if result is None or raw == "monitoring gap"
+                else round(result.latency_ms),
                 "checked": clock(checked_at),
                 "checked_at": "" if checked_at is None else checked_at.isoformat(),
                 "interval": record.interval_seconds,
@@ -1047,7 +1084,15 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "uptime": _pct(uptime(day)),
         "empty": not records,
         "activity": activity_lines(results),
+        "open_ids": {row.monitor: row.id for row in active},
+        "attention": _attention(records, latest, repo.incidents(state="open"), now),
+        "history_note": "" if hero["incident_since"] else _history_note(repo, now),
+        "last_sweep": "" if not results else clock_hms(max(item.checked_at for item in results)),
+        "last_sweep_at": ""
+        if not results
+        else max(item.checked_at for item in results).isoformat(),
         "ring": hero["ring"],
+        "hero_state": hero["hero_state"],
         "status_dot": _dot_from(
             [monitor_state(record, latest.get(record.name)) for record in records]
         ),
@@ -1304,6 +1349,156 @@ def _active_open(repo: Any) -> list[Any]:
     return [row for row in repo.incidents(state="open") if row.monitor in enabled]
 
 
+def _palette_pages() -> list[dict[str, str]]:
+    """Return the palette pages and their keyboard shortcuts."""
+    return [
+        {"label": "Dashboard", "href": url_for("dashboard"), "keys": "g d"},
+        {"label": "Monitors", "href": url_for("monitor_list"), "keys": "g m"},
+        {"label": "Incidents", "href": url_for("incident_list"), "keys": "g i"},
+        {"label": "Certificates", "href": url_for("certificates"), "keys": "g c"},
+        {"label": "New monitor", "href": url_for("monitor_new"), "keys": "n"},
+        {"label": "Alerts", "href": url_for("alerts"), "keys": ""},
+        {"label": "SLA reports", "href": url_for("sla"), "keys": ""},
+        {"label": "Agents", "href": url_for("agents"), "keys": ""},
+        {"label": "Data", "href": url_for("data_page"), "keys": ""},
+        {"label": "Settings", "href": url_for("settings"), "keys": ""},
+        {"label": "Help", "href": url_for("help_page"), "keys": ""},
+        {"label": "Public status", "href": url_for("status_page"), "keys": ""},
+    ]
+
+
+def _filter_cards(
+    cards: list[dict[str, Any]], status: str, sort: str
+) -> tuple[list[dict[str, Any]], str, str]:
+    """Apply ``?status=`` and ``?sort=`` to the monitor list."""
+    chosen = status if status in {"down", "up", "paused", "unknown", "attn"} else ""
+    ordered = sort if sort in {"uptime", "latency", "name"} else ""
+    shown = list(cards)
+    if chosen == "attn":
+        shown = [
+            card for card in shown if card["state"] in {"down", "unknown"} or card["tone"] == "warn"
+        ]
+    elif chosen:
+        shown = [card for card in shown if card["state"] == chosen]
+    if ordered == "name":
+        shown.sort(key=lambda card: str(card["name"]))
+    elif ordered == "uptime":
+        shown.sort(key=_uptime_key)
+    elif ordered == "latency":
+        shown.sort(key=lambda card: (card.get("latency") is None, -(card.get("latency") or 0)))
+    return shown, chosen, ordered
+
+
+def _uptime_key(card: dict[str, Any]) -> float:
+    """Sort the worst known uptime first. Missing uptime stays at the end."""
+    text = str(card.get("uptime", "")).rstrip("%")
+    try:
+        return float(text)
+    except ValueError:
+        return 101.0
+
+
+def _nav_rows(
+    records: list[MonitorRecord], latest: dict[str, CheckResult], now: datetime
+) -> list[dict[str, str]]:
+    """Return sidebar monitors, failing first."""
+    rows: list[tuple[int, str, dict[str, str]]] = []
+    for record in records:
+        result = latest.get(record.name)
+        state = monitor_state(record, result)
+        dot = state
+        if state == "up" and record.kind == "tls" and result is not None:
+            remaining = days_remaining(result.message, now)
+            if remaining is not None and remaining <= 30:
+                dot = "warn"
+        rank = {"down": 0, "unknown": 1, "warn": 1, "up": 2, "paused": 3}.get(dot, 2)
+        rows.append((rank, record.name, {"name": record.name, "dot": dot}))
+    rows.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in rows]
+
+
+def _attention(
+    records: list[MonitorRecord],
+    latest: dict[str, CheckResult],
+    open_rows: list[Any],
+    now: datetime,
+) -> list[dict[str, object]]:
+    """Return one Needs attention row per failing, paused-incident, or expiring monitor."""
+    by_name = {row.monitor: row for row in open_rows}
+    found: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for record in records:
+        result = latest.get(record.name)
+        state = monitor_state(record, result)
+        incident = by_name.get(record.name)
+        if state == "down" or (state == "paused" and incident is not None):
+            start = result.checked_at if result is not None else now
+            if incident is not None:
+                try:
+                    start = datetime.fromisoformat(incident.started_at)
+                except ValueError:
+                    start = result.checked_at if result is not None else now
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=UTC)
+            plain = (
+                "No results yet." if result is None else plain_message(result.message).rstrip(".")
+            )
+            found.append(
+                {
+                    "name": record.name,
+                    "pill": "Down" if state == "down" else "Paused",
+                    "tone": "down" if state == "down" else "paused",
+                    "plain": plain,
+                    "age": f"failing for {short_span(start, now)}",
+                    "incident_id": 0 if incident is None else incident.id,
+                }
+            )
+            seen.add(record.name)
+    for record in records:
+        if record.name in seen or record.kind != "tls":
+            continue
+        result = latest.get(record.name)
+        if result is None:
+            continue
+        remaining = days_remaining(result.message, now)
+        if remaining is None or remaining > 30:
+            continue
+        incident = by_name.get(record.name)
+        found.append(
+            {
+                "name": record.name,
+                "pill": "Expiring",
+                "tone": "warn",
+                "plain": plain_message(result.message).rstrip("."),
+                "age": f"expires in {remaining} d",
+                "incident_id": 0 if incident is None else incident.id,
+            }
+        )
+    return found
+
+
+def _history_note(repo: Any, now: datetime) -> str:
+    """Return the last resolved incident, or say that 30 days were quiet."""
+    ended = [row for row in repo.incidents() if row.ended_at]
+    if not ended:
+        return "No incidents in 30 d"
+    latest = max(ended, key=lambda row: row.ended_at)
+    try:
+        moment = datetime.fromisoformat(latest.ended_at)
+    except ValueError:
+        return "No incidents in 30 d"
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    days = (now - moment).days
+    if days > 30:
+        return "No incidents in 30 d"
+    if days >= 2:
+        return f"Last incident {days} days ago"
+    if days == 1:
+        return "Last incident 1 day ago"
+    return "Last incident today"
+
+
 def _shell(repo: Any) -> dict[str, object]:
     """Return the top-bar state, the plain-language headline, and nav badges."""
     latest = latest_by_name(list(repo.iter_results(None)))
@@ -1329,23 +1524,38 @@ def _shell(repo: Any) -> dict[str, object]:
         remaining = days_remaining(result.message, now)
         if remaining is not None and remaining <= 30:
             certs += 1
-    banner_id = 0
+    down = [
+        record for record in records if monitor_state(record, latest.get(record.name)) == "down"
+    ]
     banner_name = ""
     banner_plain = ""
-    if active:
-        earliest = min(active, key=lambda row: row.started_at)
-        banner_id = earliest.id
-        banner_name = earliest.monitor
-        raw_cause = earliest.reason or earliest.cause
-        banner_plain = plain_message(raw_cause) if raw_cause else ""
+    if down:
+        first = down[0]
+        banner_name = first.name
+        result = latest.get(first.name)
+        if result is not None:
+            banner_plain = plain_message(result.message).rstrip(".")
+    chip_href = url_for("monitor_list")
+    if len(down) == 1:
+        chip_href = url_for("monitor_detail", name=down[0].name)
+    elif down:
+        chip_href = url_for("monitor_list", status="down")
     return {
         "dot": dot,
         "headline": headline if isinstance(headline, str) else "",
         "nav": _NAV.get(request.endpoint or "", ""),
         "nav_incidents": len(active),
         "nav_certs": certs,
+        "nav_failing": len(down),
+        "nav_total": len(records),
+        "nav_healthy": sum(1 for item in states if item == "up"),
         "nav_names": [record.name for record in records],
-        "banner_id": banner_id,
+        "nav_items": _nav_rows(records, latest, now),
+        "nav_incident_rows": [
+            {"id": row.id, "monitor": row.monitor, "label": f"INC-{row.id:04d}"}
+            for row in repo.incidents()[:20]
+        ],
+        "chip_href": chip_href,
         "banner_name": banner_name,
         "banner_plain": banner_plain,
         "version": __version__,

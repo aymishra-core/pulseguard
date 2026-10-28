@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if editing %}Edit {{ values.name }}{% else %}Add monitor{% endif %}{% endblock %}
-{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>{% if editing %}Edit{% else %}Add monitor{% endif %}</span>{% endblock %}
+{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('monitor_edit', name=values.name) if editing else url_for('monitor_new') }}">{% if editing %}{{ values.name }}{% else %}Add monitor{% endif %}</a>{% endblock %}
 {% block page %}
 <div class="head">
 <div><div class="eyebrow">Monitor</div><h1 class="title">{% if editing %}Edit {{ values.name }}{% else %}Add monitor{% endif %}</h1><p class="sub">Pick what to watch, say where, then test it before you save.</p></div>

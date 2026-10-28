@@ -148,7 +148,7 @@ def test_dashboard_hero_matches_the_monitors_that_are_running(tmp_path: Path) ->
     with SqliteRepository(database) as repo:
         _monitor(repo, "web", enabled=True)
     waiting = client.get("/dashboard").get_data(as_text=True)
-    assert "Waiting for the first checks" in waiting
+    assert "Awaiting first sweep" in waiting
     assert "hero--danger" not in waiting
     assert "hero--ok" not in waiting
     assert 'data-ring="neutral"' in waiting
@@ -158,9 +158,10 @@ def test_dashboard_hero_matches_the_monitors_that_are_running(tmp_path: Path) ->
     with SqliteRepository(database) as repo:
         repo.add_result(_result("web", True, "HTTP 200", moment))
     clean = client.get("/dashboard").get_data(as_text=True)
-    assert "All systems operational" in clean
+    assert "All 1 monitor healthy" in clean
+    assert "NOMINAL" in clean
     assert "hero--ok" in clean
-    assert "Waiting for the first checks" not in clean
+    assert "Awaiting first sweep" not in clean
 
     with SqliteRepository(database) as repo:
         repo.add_result(_result("web", False, "connection refused", moment))
@@ -169,23 +170,24 @@ def test_dashboard_hero_matches_the_monitors_that_are_running(tmp_path: Path) ->
         repo.add_result(_result("shop", False, "connection refused", moment))
         repo.open_incident("shop", moment, "connection refused", "http")
     down = client.get("/dashboard").get_data(as_text=True)
-    assert "2 monitors are down" in down
+    assert "2 of 2 monitors failing" in down
+    assert "OUTAGE" in down
     assert "hero--danger" in down
     assert "<b>shop</b>" in down
     assert "The site did not answer (connection refused)" in down
     assert "Open incident" in down
-    assert "Waiting for the first checks" not in down
+    assert "Awaiting first sweep" not in down
     assert 'class="badge">2<' in down
-    assert "2 incidents" in down
+    assert "2 failing" in down
 
     with SqliteRepository(database) as repo:
         repo.add_result(_result("shop", True, "HTTP 200", moment))
         repo.add_result(_result("web", True, "HTTP 200", moment))
     between = client.get("/dashboard").get_data(as_text=True)
-    assert "Incident open, waiting for the next check" in between
+    assert "Incident open, awaiting next check" in between
     assert "hero--warn" in between
-    assert "Waiting for the first checks" not in between
-    assert "2 incidents" in between
+    assert "Awaiting first sweep" not in between
+    assert "2 open" in between
 
 
 def test_chip_banner_and_badge_ignore_an_orphan_incident(tmp_path: Path) -> None:
@@ -197,8 +199,8 @@ def test_chip_banner_and_badge_ignore_an_orphan_incident(tmp_path: Path) -> None
         repo.add_result(_result("web", True, "HTTP 200", utc_now()))
         repo.open_incident("Keyword", _WHEN, "missing word", "keyword")
     page = client.get("/dashboard").get_data(as_text=True)
-    assert "All systems operational" in page
-    assert "Waiting for the first checks" not in page
+    assert "All 1 monitor healthy" in page
+    assert "Awaiting first sweep" not in page
     assert "1 incident" not in page
     assert 'class="badge"' not in page
     assert "Open incident <" not in page
