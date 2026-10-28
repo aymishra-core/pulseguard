@@ -11,17 +11,17 @@
 {% include "_sprite.html" %}
 <div class="app">
 <aside class="side">
-<div class="brand">
+<a class="brand" href="{{ url_for('dashboard') }}" aria-label="PulseGuard dashboard">
 <span class="brand-mark"><svg class="i i-lg" aria-hidden="true"><use href="#pulse"/></svg></span>
 <div><b>PulseGuard</b><small>Uptime console</small></div>
-</div>
+</a>
 <a class="btn btn-primary side-add" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg><span>Add monitor</span></a>
 <div class="nav-label">Monitor</div>
 <nav class="nav" aria-label="Monitor">
 <a href="{{ url_for('dashboard') }}" {% if nav == 'dashboard' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#grid"/></svg><span>Dashboard</span></a>
 <div class="nav-mons" data-nav-mons>
 <div class="nav-row">
-<a href="{{ url_for('monitor_list') }}" {% if nav == 'monitors' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#activity"/></svg><span>Monitors</span>{% if nav_failing %}<span class="badge">{{ nav_failing }}</span>{% endif %}</a>
+<a href="{{ url_for('monitor_list') }}" {% if nav == 'monitors' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#activity"/></svg><span>Monitors</span>{% if nav_failing %}<span data-snap="badge-fail" class="badge">{{ nav_failing }}</span>{% endif %}</a>
 <button class="nav-toggle" type="button" data-nav-toggle aria-expanded="true" aria-label="Show monitors"><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg></button>
 </div>
 <div class="nav-mon-list">
@@ -31,8 +31,8 @@
 {% if nav_items|length > 8 %}<a class="nav-mon" href="{{ url_for('monitor_list') }}"><span>View all</span></a>{% endif %}
 </div>
 </div>
-<a href="{{ url_for('incident_list') }}" {% if nav == 'incidents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#alert"/></svg><span>Incidents</span>{% if nav_incidents %}<span class="badge">{{ nav_incidents }}</span>{% endif %}</a>
-<a href="{{ url_for('certificates') }}" {% if nav == 'certificates' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#shield"/></svg><span>Certificates</span>{% if nav_certs %}<span class="badge warn">{{ nav_certs }}</span>{% endif %}</a>
+<a href="{{ url_for('incident_list') }}" {% if nav == 'incidents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#alert"/></svg><span>Incidents</span>{% if nav_incidents %}<span data-snap="badge-open" class="badge">{{ nav_incidents }}</span>{% endif %}</a>
+<a href="{{ url_for('certificates') }}" {% if nav == 'certificates' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#shield"/></svg><span>Certificates</span>{% if nav_certs %}<span data-snap="badge-cert" class="badge warn">{{ nav_certs }}</span>{% endif %}</a>
 <a href="{{ url_for('alerts') }}" {% if nav == 'alerts' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#bell"/></svg><span>Alerts</span></a>
 <a href="{{ url_for('sla') }}" {% if nav == 'sla' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#gauge"/></svg><span>SLA reports</span></a>
 </nav>
@@ -53,15 +53,7 @@
 <button class="icon-btn menu-btn" type="button" data-menu aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#menu"/></svg></button>
 <div class="crumb">{% block crumb %}<span>Dashboard</span>{% endblock %}</div>
 <span class="grow"></span>
-{% if nav_failing %}
-<a class="chip down" href="{{ chip_href }}"><span class="dot"></span><span class="l">{{ nav_failing }} failing</span></a>
-{% elif nav_incidents %}
-<a class="chip warn" href="{{ url_for('incident_list', status='open') }}"><span class="dot"></span><span class="l">{{ nav_incidents }} open</span></a>
-{% elif nav_total %}
-<a class="chip {{ 'ok' if nav_healthy == nav_total else 'warn' }}" href="{{ url_for('monitor_list') }}"><span class="dot"></span><span class="l">{{ nav_healthy }}/{{ nav_total }} healthy</span></a>
-{% else %}
-<span class="chip warn"><span class="dot"></span><span class="l">Awaiting first sweep</span></span>
-{% endif %}
+<a class="chip {% if nav_failing %}down{% elif nav_incidents %}warn{% elif nav_total and nav_healthy == nav_total %}ok{% else %}warn{% endif %}" href="{% if nav_failing %}{{ chip_href }}{% elif nav_incidents %}{{ url_for('incident_list', status='open') }}{% elif nav_total %}{{ url_for('monitor_list') }}{% else %}{{ url_for('dashboard') }}{% endif %}" id="pg-chip" data-snap="chip"><span class="dot"></span><span class="l" data-snap="chip-label">{% if nav_failing %}{{ nav_failing }} failing{% elif nav_incidents %}{{ nav_incidents }} open{% elif nav_total %}{{ nav_healthy }}/{{ nav_total }} healthy{% else %}Awaiting first sweep{% endif %}</span></a>
 <button class="jump" type="button" data-open="pal" aria-label="Search"><svg class="i i-sm" aria-hidden="true"><use href="#search"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button>
 <button class="icon-btn" id="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme"><svg class="i" aria-hidden="true"><use href="#sun"/></svg></button>
 <a class="avatar" href="{{ url_for('settings') }}" aria-label="Account">{{ user[:2]|upper }}</a>
@@ -111,6 +103,7 @@
 </div>
 </div>
 <div class="toasts" aria-live="polite">{% if flash %}<div class="toast {{ flash_level }}" role="status">{{ flash }}</div>{% endif %}</div>
+<script src="{{ url_for('static', filename='live.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

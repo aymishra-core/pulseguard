@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from markupsafe import Markup
 
@@ -309,6 +309,39 @@ def clock_hms(value: object) -> str:
     if moment is None:
         return "—"
     return moment.astimezone(UTC).strftime("%H:%M:%S")
+
+
+def clock_hm(value: object) -> str:
+    """Return a UTC hour and minute. The browser localises it."""
+    moment = _moment(value)
+    if moment is None:
+        return "—"
+    return moment.astimezone(UTC).strftime("%H:%M")
+
+
+def clock_span(start: datetime, now: datetime) -> str:
+    """Return a running duration as ``HH:MM:SS``."""
+    seconds = int((now - start).total_seconds())
+    if seconds < 0:
+        seconds = 0
+    minutes, sec = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours:02d}:{minutes:02d}:{sec:02d}"
+
+
+def local_day_start(now: datetime, offset_minutes: int) -> datetime:
+    """Return local midnight for the zone ``offset_minutes`` east of UTC."""
+    zone = timezone(timedelta(minutes=offset_minutes))
+    local = now.astimezone(zone)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def mean_successful_ms(results: Sequence[CheckResult]) -> int | None:
+    """Return the mean latency of successful checks, as a whole number of milliseconds."""
+    samples = [row.latency_ms for row in results if row.ok and row.message != "monitoring gap"]
+    if not samples:
+        return None
+    return round(sum(samples) / len(samples))
 
 
 def days_remaining(message: str, now: datetime) -> int | None:

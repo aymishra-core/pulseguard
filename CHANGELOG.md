@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3 - 2026-10-29
+
+The dashboard reads one snapshot. The hero, the tiles, the top-bar chip, the sidebar badges, Needs attention, the monitor cards, the activity feed, and the live log all come from that object, and `/api/dashboard` returns it. A poll applies a response only when it is newer, pauses while the tab is hidden, and says the connection is lost after 15 seconds without a success. The PulseGuard mark links to the dashboard.
+
 ## 1.3.2 - 2026-10-28
 
 A failing monitor is one click from the dashboard. The hero names the service state (nominal, degraded, outage, or awaiting the first sweep), the Needs attention list links each problem to its monitor and incident, and the sidebar, breadcrumbs, and command palette follow the same monitors.

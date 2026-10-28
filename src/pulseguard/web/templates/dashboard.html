@@ -4,18 +4,18 @@
 {% block page %}
 <div class="head">
 <div><div class="eyebrow">Overview</div><h1 class="title">Dashboard</h1><p class="sub">What is up, what is not, and what needs you right now.</p></div>
-<div class="actions"><span class="live"><span class="dot" style="color:var(--ok)"></span>Live · updated just now</span><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
+<div class="actions"><span class="live" data-live data-generated="{{ generated_ms }}"><span class="dot" style="color:var(--ok)"></span><span data-live-label>Live · updated just now</span></span><form method="post" action="{{ url_for('monitor_run_all') }}" data-run-all><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Check all now</button><span class="run-note" data-run-note></span></form><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
 {% set total = counts.up + counts.down + counts.unknown + counts.paused %}
 <section class="card hero {{ hero_class }} hud" data-ring="{{ ring }}" data-kpis aria-label="Status">
 <div class="ring" id="hero-ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="{{ hero_icon }}"/></svg></div></div>
 <div class="hero-main">
-<div class="hero-eye">Service state{% if hero_state %} · {{ hero_state }}{% endif %}</div>
-<h2>{{ hero_title }}</h2>
+<div class="hero-eye" data-snap="hero-eye">Service state{% if hero_state %} · {{ hero_state }}{% endif %}</div>
+<h2 data-snap="hero-title">{{ hero_title }}</h2>
 <p>{% if hero_name %}<a href="{{ url_for('monitor_detail', name=hero_name) }}"><b>{{ hero_name }}</b></a>{% if hero_plain %} {{ hero_plain }}{% endif %}{% elif empty %}No monitors yet. Add one and PulseGuard will start checking it.{% endif %}</p>
 </div>
 <div class="hero-side">
-{% if incident_since %}<div class="t"><small>Open for</small><b>{{ duration(incident_since, '') }}</b></div>{% elif history_note %}<div class="t"><b>{{ history_note }}</b></div>{% endif %}
+<div class="t" data-snap="aside">{% if open_incident_count %}<small>Open for</small><b data-snap="open-for" data-opened="{{ open_since }}">{{ open_for }}</b>{% elif history_note %}<b data-snap="history">{{ history_note }}</b>{% endif %}</div>
 <div class="hero-actions">
 {% if counts.down == 1 %}<a class="btn btn-danger" href="{{ url_for('monitor_detail', name=hero_name) }}">Open monitor</a>
 {% elif counts.down > 1 %}<a class="btn btn-danger" href="{{ url_for('monitor_list', status='down') }}">View {{ counts.down }} failing</a>
@@ -23,12 +23,12 @@
 {% if incident_id %}<a class="btn btn-ghost" href="{{ url_for('incident_detail', incident_id=incident_id) }}">Open incident</a>{% endif %}
 </div>
 </div>
-<p class="hero-sub">{% if last_sweep_at %}Last sweep <time datetime="{{ last_sweep_at }}" data-clock="hms">{{ last_sweep }}</time>{% else %}Last sweep —{% endif %} · {{ checks_today }} checks today · mean latency {% if avg_ms is not none %}{{ avg_ms }} ms{% else %}—{% endif %} · {{ open_incidents }} open incidents</p>
+<p class="hero-sub">Last sweep <time data-snap="sweep" datetime="{{ last_sweep_at }}" data-clock="hms">{{ last_sweep }}</time> · <span data-snap="checks">{{ checks_today }}</span> checks today · mean latency <span data-snap="latency">{% if avg_ms is not none %}{{ avg_ms }}{% else %}—{% endif %}</span> ms · <span data-snap="open">{{ open_incident_count }}</span> open incidents</p>
 </section>
 {% if attention %}
-<section class="card attn" aria-label="Needs attention">
+<section class="card attn" data-attention aria-label="Needs attention">
 <div class="card-head"><h2>Needs attention</h2></div>
-<ul>
+<ul data-attention-list>
 {% for row in attention %}
 <li>
 <span class="pill {{ row.tone }}">{{ row.pill }}</span>
@@ -55,8 +55,8 @@
 <section class="kpis">
 <a class="kpi" data-tone="accent" href="{{ url_for('monitor_list') }}">
 <div class="kpi-top"><span>Monitors</span><svg class="i" aria-hidden="true"><use href="#activity"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-count="{{ total }}" data-kpi="monitors">{{ total }}</div>{% if trend_up|length > 1 %}<div class="spark" data-spark="{{ trend_up|join(',') }}"></div>{% endif %}</div>
-<div class="kpi-sub">{{ counts.up }} up · {{ counts.down }} down</div>
+<div class="kpi-row"><div class="kpi-val" data-count="{{ total }}" data-kpi="monitors" data-snap="total">{{ total }}</div>{% if trend_up|length > 1 %}<div class="spark" data-spark="{{ trend_up|join(',') }}"></div>{% endif %}</div>
+<div class="kpi-sub" data-snap="mix">{{ counts.up }} up · {{ counts.down }} down</div>
 </a>
 <a class="kpi" data-tone="ok" href="{{ url_for('monitor_list', sort='uptime') }}">
 <div class="kpi-top"><span>Uptime 24 h</span><svg class="i" aria-hidden="true"><use href="#gauge"/></svg></div>
@@ -65,18 +65,18 @@
 </a>
 <a class="kpi" data-tone="accent" href="{{ url_for('monitor_list', sort='latency') }}">
 <div class="kpi-top"><span>Avg latency</span><svg class="i" aria-hidden="true"><use href="#clock"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" {% if avg_ms is not none %}data-count="{{ avg_ms }}" data-suf="ms" {% endif %}data-kpi="latency">{{ avg_ms if avg_ms is not none else '—' }}</div></div>
+<div class="kpi-row"><div class="kpi-val" data-kpi="latency"><span data-snap="latency">{{ avg_ms if avg_ms is not none else '—' }}</span>{% if avg_ms is not none %}<small>ms</small>{% endif %}</div></div>
 <div class="kpi-sub">Whole milliseconds</div>
 </a>
 <a class="kpi" data-tone="danger" href="{{ url_for('incident_list', status='open') }}">
 <div class="kpi-top"><span>Open incidents</span><svg class="i" aria-hidden="true"><use href="#alert"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-count="{{ open_incidents }}" data-kpi="incidents">{{ open_incidents }}</div></div>
-<div class="kpi-sub">{% if open_incidents %}Open now{% else %}None open{% endif %}</div>
+<div class="kpi-row"><div class="kpi-val" data-kpi="incidents"><span data-snap="open">{{ open_incident_count }}</span></div></div>
+<div class="kpi-sub" data-snap="incident-sub">{% if open_incident_count %}since <time datetime="{{ open_since }}" data-clock="hm">{{ incident_hm }}</time>{% else %}None open{% endif %}</div>
 </a>
 <div class="kpi" data-tone="accent">
 <div class="kpi-top"><span>Checks today</span><svg class="i" aria-hidden="true"><use href="#refresh"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-count="{{ checks_today }}" data-kpi="checks">{{ checks_today }}</div></div>
-<div class="kpi-sub">UTC day</div>
+<div class="kpi-row"><div class="kpi-val" data-kpi="checks"><span data-snap="checks">{{ checks_today }}</span></div></div>
+<div class="kpi-sub">since midnight</div>
 </div>
 <a class="kpi" data-tone="warn" href="{% if next_cert_name %}{{ url_for('monitor_detail', name=next_cert_name) }}{% else %}{{ url_for('certificates') }}{% endif %}">
 <div class="kpi-top"><span>Next cert expiry</span><svg class="i" aria-hidden="true"><use href="#shield"/></svg></div>
@@ -101,7 +101,7 @@
 <div class="split">
 <div class="card">
 <div class="card-head"><h2>Activity</h2><span class="grow"></span><a class="tlink" href="{{ url_for('incident_list') }}">All events</a></div>
-<ul class="feed">
+<ul class="feed" data-feed>
 {% for event in activity %}
 <li class="{{ 'bad' if event.state == 'down' else ('ok' if event.state == 'up' else 'gap') }}"><span class="d"></span><div><a href="{% if event.state == 'down' and open_ids.get(event.monitor) %}{{ url_for('incident_detail', incident_id=open_ids[event.monitor]) }}{% else %}{{ url_for('monitor_detail', name=event.monitor) }}{% endif %}"><b>{{ event.text }}</b></a><small>{{ event.state }}</small></div><time datetime="{{ event.at }}">{{ clock(event.at) }}</time></li>
 {% else %}
@@ -113,7 +113,7 @@
 <div class="card-head"><h2>Live check log</h2><span class="grow"></span><span class="live"><span class="dot" style="color:var(--ok)"></span>streaming</span></div>
 <div class="log" data-log>
 {% for row in stream %}
-<div class="row"><span class="ts"><time datetime="{{ row.at }}">{{ clock(row.at) }}</time></span> <span class="lv {{ 'ok' if row.mark == 'PASS' else ('bad' if row.mark == 'FAIL' else 'wn') }}">{{ row.mark }}</span> <b>{{ row.name }}</b> <span>{{ row.plain }}{% if row.mark != 'GAP' %} · {{ row.latency }} ms{% endif %}</span></div>
+<div class="row" data-log-id="{{ row.id }}"><span class="ts"><time datetime="{{ row.at }}">{{ clock(row.at) }}</time></span> <span class="lv {{ 'ok' if row.mark == 'PASS' else ('bad' if row.mark == 'FAIL' else 'wn') }}">{{ row.mark }}</span> <b>{{ row.name }}</b> <span>{{ row.plain }}{% if row.mark != 'GAP' %} · {{ row.latency }} ms{% endif %}</span></div>
 {% else %}
 <div class="row"><span>No activity yet</span></div>
 {% endfor %}

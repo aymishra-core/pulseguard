@@ -88,7 +88,7 @@ def test_hero_wording_for_each_state(tmp_path: Path) -> None:
         repo.resolve_incident("web", quiet)
     settled = client.get("/dashboard").get_data(as_text=True)
     assert "All 2 monitors healthy" in settled
-    assert "Last incident 2 days ago" in settled
+    assert "Last incident 2 d ago, resolved" in settled
     assert "Needs attention" not in settled
 
 
@@ -228,10 +228,10 @@ def test_age_filter_and_history_helpers() -> None:
     assert _history_note(_Repo([]), now) == "No incidents in 30 d"
     assert _history_note(repo, now) == "No incidents in 30 d"
     assert _history_note(_Repo([_Row("day", "", 3, ended="2026-10-27T12:00:00")]), now) == (
-        "Last incident 1 day ago"
+        "Last incident 1 d ago, resolved"
     )
     assert _history_note(_Repo([_Row("day", "", 3, ended="2026-10-28T01:00:00+00:00")]), now) == (
-        "Last incident today"
+        "Last incident 11 h ago, resolved"
     )
     assert _history_note(_Repo([_Row("old", "", 1, ended="2026-01-01T00:00:00+00:00")]), now) == (
         "No incidents in 30 d"

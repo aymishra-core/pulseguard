@@ -5,13 +5,14 @@ Rendered pages do not fetch monitor URLs. Run-check is an explicit POST.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
 import secrets
 import time
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -59,13 +60,17 @@ from pulseguard.web.board import (
     activity_lines,
     certificate_band,
     clock,
+    clock_hm,
     clock_hms,
+    clock_span,
     dashboard_hero,
     days_remaining,
     hint_for,
     hourly_counts,
     latency_chart,
     latest_by_name,
+    local_day_start,
+    mean_successful_ms,
     monitor_state,
     plain_message,
     segments,
@@ -119,16 +124,24 @@ def register_pages(app: Flask) -> None:
         if not isinstance(user, str):
             return user
         with _repository() as repo:
-            body = _dashboard_body(repo)
-        return _page("dashboard.html", **body)
+            snap = build_snapshot(repo, utc_now())
+        return _page("dashboard.html", snapshot=snap)
 
     @app.get("/api/dashboard")
     def dashboard_json() -> tuple[Response, int] | Response:
         if _signed_in() is None:
             return jsonify({"error": "login required"}), 401
+        offset = _tz_offset()
         with _repository() as repo:
-            body = _dashboard_body(repo)
-        return jsonify(_json_ready(body))
+            snap = build_snapshot(repo, utc_now(), offset_minutes=offset)
+        tag = _etag(snap)
+        if request.headers.get("If-None-Match") == tag:
+            response = Response(status=304)
+            response.headers["ETag"] = tag
+            return response
+        response = jsonify(_json_ready(snap))
+        response.headers["ETag"] = tag
+        return response
 
     @app.get("/api/palette")
     def palette_json() -> tuple[Response, int] | Response:
@@ -156,9 +169,24 @@ def register_pages(app: Flask) -> None:
     def activity_json() -> tuple[Response, int] | Response:
         if _signed_in() is None:
             return jsonify({"error": "login required"}), 401
+        try:
+            marker = int(request.args.get("since", "0") or "0")
+        except ValueError:
+            marker = 0
         with _repository() as repo:
-            events = activity_lines(list(repo.iter_results(None)))
-        return jsonify({"events": events})
+            snap = build_snapshot(repo, utc_now())
+        rows = [row for row in snap["log"] if int(row["id"]) > marker]
+        rows.sort(key=lambda row: str(row["at"]))
+        feed = [row for row in snap["activity"] if int(row["id"]) > marker]
+        feed.sort(key=lambda row: str(row["at"]))
+        return jsonify(
+            {
+                "generated_at": snap["generated_at"],
+                "generated_ms": snap["generated_ms"],
+                "events": rows,
+                "activity": feed,
+            }
+        )
 
     @app.get("/monitors")
     def monitor_list() -> str | RedirectResponse | tuple[str, int]:
@@ -168,15 +196,14 @@ def register_pages(app: Flask) -> None:
         status = request.args.get("status", "")
         sort = request.args.get("sort", "")
         with _repository() as repo:
-            body = _dashboard_body(repo)
-        cards = body.pop("cards")
-        shown, chosen, ordered = _filter_cards(cards, status, sort)
+            snap = build_snapshot(repo, utc_now())
+        shown, chosen, ordered = _filter_cards(list(snap["cards"]), status, sort)
         return _page(
             "monitors.html",
+            snapshot=snap,
             cards=shown,
             list_status=chosen,
             list_sort=ordered,
-            **body,
         )
 
     @app.route("/monitors/new", methods=["GET", "POST"])
@@ -184,7 +211,7 @@ def register_pages(app: Flask) -> None:
         return _monitor_form(None)
 
     @app.post("/monitors/run")
-    def monitor_run_all() -> str | RedirectResponse | tuple[str, int]:
+    def monitor_run_all() -> Response | str | RedirectResponse | tuple[str, int]:
         """Run every enabled monitor once. Login and CSRF are required."""
         denied = _guard()
         if denied is not None:
@@ -198,6 +225,8 @@ def register_pages(app: Flask) -> None:
             except PulseGuardError:
                 continue
             ran += 1
+        if request.accept_mimetypes["application/json"] > request.accept_mimetypes["text/html"]:
+            return jsonify({"ran": ran, "total": len(names)})
         _flash(f"Ran {ran} checks")
         return redirect(url_for("dashboard"))
 
@@ -961,12 +990,12 @@ def _record_values(record: MonitorRecord, options: dict[str, object]) -> dict[st
     return values
 
 
-def _dashboard_body(repo: Any) -> dict[str, Any]:
-    """Collect the summary and the cards from stored rows."""
-    records = repo.monitors()
+def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict[str, Any]:
+    """Read the catalog once and return every dashboard number from that read."""
+    records = list(repo.monitors())
     results = list(repo.iter_results(None))
+    incidents = list(repo.incidents())
     latest = latest_by_name(results)
-    now = utc_now()
     cards = []
     counts = {"up": 0, "down": 0, "unknown": 0, "paused": 0}
     certs = 0
@@ -999,9 +1028,11 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         if tone == "warn":
             warns += 1
         left = record.interval_seconds
+        next_check = now
         if checked_at is not None:
             elapsed = int((now - checked_at).total_seconds())
             left = max(0, record.interval_seconds - elapsed)
+            next_check = checked_at + timedelta(seconds=record.interval_seconds)
         if raw == "monitoring gap":
             line = "No data"
         elif result is None:
@@ -1024,8 +1055,10 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
                 else round(result.latency_ms),
                 "checked": clock(checked_at),
                 "checked_at": "" if checked_at is None else checked_at.isoformat(),
+                "last_checked_at": "" if checked_at is None else checked_at.isoformat(),
                 "interval": record.interval_seconds,
                 "left": left,
+                "next_check_at": next_check.isoformat(),
                 "uptime": _pct(uptime(recent)),
                 "spark": sparkline([item.latency_ms for item in mine]),
                 "points": [
@@ -1038,29 +1071,75 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
             }
         )
     day = window(results, now, 24)
-    active = _active_open(repo)
+    enabled = {record.name for record in records if record.enabled}
+    active = sorted(
+        (row for row in incidents if row.state == "open" and row.monitor in enabled),
+        key=lambda row: row.started_at,
+    )
     hero = dashboard_hero(records, latest, active, results_exist=bool(results))
-    last_cycle = ""
-    if results:
-        last_cycle = max(item.checked_at for item in results).isoformat()
-    stream = [_stream_row(item) for item in reversed(results[-12:])]
+    active_times = [item.checked_at for item in results if item.monitor in enabled]
+    last_sweep_at = max(active_times) if active_times else None
+    ranked = sorted(
+        range(len(results)),
+        key=lambda index: (results[index].checked_at, results[index].monitor, index),
+    )
+    result_ids = {index: rank for rank, index in enumerate(ranked, start=1)}
+    log_rows = [_log_row(results[index], result_ids[index]) for index in ranked]
+    by_moment = {
+        (item.monitor, item.checked_at.isoformat()): result_ids[index]
+        for index, item in enumerate(results)
+    }
+    activity: list[dict[str, object]] = []
+    for event in activity_lines(results, limit=50):
+        activity.append(
+            {
+                "at": event["at"],
+                "state": event["state"],
+                "text": event["text"],
+                "monitor": event["monitor"],
+                "id": by_moment.get((event["monitor"], event["at"]), 0),
+            }
+        )
+    opened = _aside(active, incidents, now)
     alerts_ready = bool((repo.get_setting("smtp_host") or "").strip())
     has_heartbeat = any(record.kind == "heartbeat" for record in records)
+    open_rows = [
+        {"id": row.id, "monitor": row.monitor, "opened_at": row.started_at, "state": row.state}
+        for row in active
+    ]
+    last_incident = _last_incident(incidents)
+    generated_ms = int(now.timestamp() * 1000)
+    mean_ms = mean_successful_ms(day)
+    day_start = local_day_start(now, offset_minutes)
+    checks_today = sum(1 for item in results if item.checked_at >= day_start)
     return {
+        "generated_at": now.astimezone(UTC).isoformat(),
+        "generated_ms": generated_ms,
         "cards": cards,
-        "counts": counts,
-        "open_incidents": len(active),
+        "monitors": cards,
+        "counts": {
+            **counts,
+            "total": len(records),
+            "expiring": certs,
+        },
+        "open_incidents": open_rows,
+        "open_incident_count": len(active),
+        "last_incident": last_incident,
         "incident_id": hero["incident_id"],
         "incident_since": hero["incident_since"],
         "incident_name": hero["incident_name"],
         "incident_plain": hero["incident_plain"],
+        "open_for": opened["open_for"],
+        "incident_hm": opened["incident_hm"],
+        "open_since": opened["open_since"],
         "hero_class": hero["hero_class"],
         "hero_icon": hero["hero_icon"],
         "hero_title": hero["hero_title"],
         "hero_name": hero["hero_name"],
         "hero_plain": hero["hero_plain"],
-        "last_cycle": last_cycle,
-        "stream": stream,
+        "last_cycle": "" if last_sweep_at is None else last_sweep_at.isoformat(),
+        "stream": list(reversed(log_rows[-50:])),
+        "log": list(reversed(log_rows[-50:])),
         "alerts_ready": alerts_ready,
         "has_heartbeat": has_heartbeat,
         "trend_up": hourly_counts(results, now, ok=True),
@@ -1071,62 +1150,156 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "tls_count": tls_count,
         "next_cert": next_cert,
         "next_cert_name": next_cert_name,
-        "avg_ms": _average_ms(day),
-        "checks_today": sum(1 for item in results if item.checked_at.date() == now.date()),
-        "steps_done": sum(
-            (
-                True,
-                bool(records),
-                alerts_ready,
-                tls_count > 0,
-            )
-        ),
+        "next_cert_expiry": None
+        if next_cert is None
+        else {"name": next_cert_name, "days": next_cert},
+        "avg_ms": mean_ms,
+        "mean_latency_ms": mean_ms,
+        "checks_today": checks_today,
+        "steps_done": sum((True, bool(records), alerts_ready, tls_count > 0)),
         "uptime": _pct(uptime(day)),
+        "uptime_24h": _pct(uptime(day)),
         "empty": not records,
-        "activity": activity_lines(results),
+        "activity": activity,
         "open_ids": {row.monitor: row.id for row in active},
-        "attention": _attention(records, latest, repo.incidents(state="open"), now),
-        "history_note": "" if hero["incident_since"] else _history_note(repo, now),
-        "last_sweep": "" if not results else clock_hms(max(item.checked_at for item in results)),
-        "last_sweep_at": ""
-        if not results
-        else max(item.checked_at for item in results).isoformat(),
+        "attention": _attention(
+            records, latest, [row for row in incidents if row.state == "open"], now
+        ),
+        "history_note": opened["history_note"],
+        "last_sweep": "—" if last_sweep_at is None else clock_hms(last_sweep_at),
+        "last_sweep_at": "" if last_sweep_at is None else last_sweep_at.isoformat(),
         "ring": hero["ring"],
         "hero_state": hero["hero_state"],
         "status_dot": _dot_from(
             [monitor_state(record, latest.get(record.name)) for record in records]
         ),
+        "nav_items": _nav_rows(records, latest, now),
+        "palette_incidents": [
+            {"id": row.id, "monitor": row.monitor, "label": f"INC-{row.id:04d}"}
+            for row in incidents[:20]
+        ],
     }
+
+
+def _dashboard_body(repo: Any) -> dict[str, Any]:
+    """Return the dashboard from one snapshot."""
+    return build_snapshot(repo, utc_now())
+
+
+def _log_row(item: CheckResult, row_id: int) -> dict[str, object]:
+    """Return one real check for the live log."""
+    row = _stream_row(item)
+    row["id"] = row_id
+    return row
+
+
+def _aside(active: list[Any], incidents: list[Any], now: datetime) -> dict[str, str]:
+    """Return the hero duration and the incident-tile subtitle from the same rows."""
+    if active:
+        earliest = min(active, key=lambda row: row.started_at)
+        start = _parse_time(earliest.started_at) or now
+        return {
+            "open_for": clock_span(start, now),
+            "incident_hm": clock_hm(start),
+            "open_since": earliest.started_at,
+            "history_note": "",
+        }
+    return {
+        "open_for": "",
+        "incident_hm": "",
+        "open_since": "",
+        "history_note": _note_from(incidents, now),
+    }
+
+
+def _note_from(incidents: list[Any], now: datetime) -> str:
+    """Return the last resolved incident, or say that 30 days were quiet."""
+    ended = [row for row in incidents if row.ended_at]
+    if not ended:
+        return "No incidents in 30 d"
+    latest = max(ended, key=lambda row: row.ended_at)
+    moment = _parse_time(latest.ended_at)
+    if moment is None or (now - moment).days > 30:
+        return "No incidents in 30 d"
+    return f"Last incident {short_span(moment, now)} ago, resolved"
+
+
+def _parse_time(value: str) -> datetime | None:
+    """Parse a stored timestamp. Blank and broken values stay empty."""
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment
+
+
+def _last_incident(incidents: list[Any]) -> dict[str, object] | None:
+    """Return the newest incident, open or resolved."""
+    if not incidents:
+        return None
+    latest = max(incidents, key=lambda row: row.ended_at or row.started_at)
+    return {
+        "id": latest.id,
+        "opened_at": latest.started_at,
+        "resolved_at": latest.ended_at or None,
+    }
+
+
+def _etag(snap: dict[str, Any]) -> str:
+    """Hash the stored facts. A ticking clock does not change the tag."""
+    counts = snap["counts"]
+    core = {
+        "checks_today": snap["checks_today"],
+        "mean_latency_ms": snap["mean_latency_ms"],
+        "uptime_24h": snap["uptime_24h"],
+        "counts": counts,
+        "open": [(row["id"], row["opened_at"]) for row in snap["open_incidents"]],
+        "last": snap["last_incident"],
+        "sweep": snap["last_sweep_at"],
+        "monitors": [
+            (
+                card["name"],
+                card["state"],
+                card["message"],
+                card["last_checked_at"] if "last_checked_at" in card else card["checked_at"],
+                card["latency"],
+                card["uptime"],
+            )
+            for card in snap["cards"]
+        ],
+        "activity": [row.get("id") for row in snap["activity"]],
+        "log": [row.get("id") for row in snap["log"]],
+        "cert": snap["next_cert_expiry"],
+    }
+    raw = json.dumps(core, sort_keys=True, default=str).encode()
+    return '"' + hashlib.sha256(raw).hexdigest()[:32] + '"'
+
+
+def _tz_offset() -> int:
+    """Return the viewer's offset in minutes east of UTC. The page defaults to UTC."""
+    raw = request.args.get("offset", "0")
+    try:
+        offset = int(raw)
+    except ValueError:
+        return 0
+    if offset < -14 * 60 or offset > 14 * 60:
+        return 0
+    return offset
 
 
 def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
-    """Drop the SVG markup. The browser draws the sparkline from numbers."""
-    cards = []
+    """Return the snapshot without SVG markup."""
+    ready = {key: value for key, value in body.items() if key != "cards"}
+    monitors = []
     for card in body["cards"]:
         copy = dict(card)
         copy.pop("spark", None)
-        cards.append(copy)
-    return {
-        "counts": body["counts"],
-        "open_incidents": body["open_incidents"],
-        "incident_id": body.get("incident_id", 0),
-        "incident_since": body.get("incident_since", ""),
-        "incident_name": body.get("incident_name", ""),
-        "incident_plain": body.get("incident_plain", ""),
-        "last_cycle": body.get("last_cycle", ""),
-        "stream": body.get("stream", []),
-        "certs": body["certs"],
-        "warns": body.get("warns", 0),
-        "next_cert": body.get("next_cert"),
-        "next_cert_name": body.get("next_cert_name", ""),
-        "avg_ms": body.get("avg_ms"),
-        "checks_today": body.get("checks_today", 0),
-        "uptime": body["uptime"],
-        "ring": body.get("ring", "warn"),
-        "dot": body.get("status_dot", "unknown"),
-        "activity": body.get("activity", []),
-        "monitors": cards,
-    }
+        monitors.append(copy)
+    ready["monitors"] = monitors
+    ready["cards"] = monitors
+    return ready
 
 
 def _rows(repo: Any) -> list[dict[str, object]]:
@@ -1326,21 +1499,24 @@ def _probe_allowed(user: str) -> bool:
 
 
 def _page(template: str, **extra: Any) -> str:
-    """Render a signed-in page. The caller already checked the login."""
+    """Render a signed-in page from one snapshot. The caller already checked the login."""
     user = _signed_in() or ""
     text = session.pop("flash", "")
     level = session.pop("flash_level", "ok")
-    with _repository() as repo:
-        shell = _shell(repo)
-    return render_template(
-        template,
-        user=user,
-        csrf_token=ensure_csrf(),
-        flash=text if isinstance(text, str) else "",
-        flash_level=level if isinstance(level, str) else "ok",
-        **shell,
-        **extra,
-    )
+    snap = extra.pop("snapshot", None)
+    if snap is None:
+        with _repository() as repo:
+            snap = build_snapshot(repo, utc_now())
+    context: dict[str, Any] = {
+        "user": user,
+        "csrf_token": ensure_csrf(),
+        "flash": text if isinstance(text, str) else "",
+        "flash_level": level if isinstance(level, str) else "ok",
+    }
+    context.update(snap)
+    context.update(_shell_from(snap))
+    context.update(extra)
+    return render_template(template, **context)
 
 
 def _active_open(repo: Any) -> list[Any]:
@@ -1479,82 +1655,35 @@ def _attention(
 
 def _history_note(repo: Any, now: datetime) -> str:
     """Return the last resolved incident, or say that 30 days were quiet."""
-    ended = [row for row in repo.incidents() if row.ended_at]
-    if not ended:
-        return "No incidents in 30 d"
-    latest = max(ended, key=lambda row: row.ended_at)
-    try:
-        moment = datetime.fromisoformat(latest.ended_at)
-    except ValueError:
-        return "No incidents in 30 d"
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
-    days = (now - moment).days
-    if days > 30:
-        return "No incidents in 30 d"
-    if days >= 2:
-        return f"Last incident {days} days ago"
-    if days == 1:
-        return "Last incident 1 day ago"
-    return "Last incident today"
+    return _note_from(list(repo.incidents()), now)
 
 
-def _shell(repo: Any) -> dict[str, object]:
-    """Return the top-bar state, the plain-language headline, and nav badges."""
-    latest = latest_by_name(list(repo.iter_results(None)))
-    records = list(repo.monitors())
-    states = [monitor_state(record, latest.get(record.name)) for record in records]
-    dot = _dot_from(states)
-    active = _active_open(repo)
-    hero = dashboard_hero(
-        records,
-        latest,
-        active,
-        results_exist=bool(latest),
-    )
-    headline = hero["hero_title"]
-    now = utc_now()
-    certs = 0
-    for record in records:
-        if record.kind != "tls":
-            continue
-        result = latest.get(record.name)
-        if result is None:
-            continue
-        remaining = days_remaining(result.message, now)
-        if remaining is not None and remaining <= 30:
-            certs += 1
-    down = [
-        record for record in records if monitor_state(record, latest.get(record.name)) == "down"
-    ]
-    banner_name = ""
+def _shell_from(snap: dict[str, Any]) -> dict[str, object]:
+    """Return the top bar and badges from a snapshot. This does not read the database."""
+    counts = snap["counts"]
+    failing = [item for item in snap["nav_items"] if item["dot"] == "down"]
+    banner_name = failing[0]["name"] if failing else ""
     banner_plain = ""
-    if down:
-        first = down[0]
-        banner_name = first.name
-        result = latest.get(first.name)
-        if result is not None:
-            banner_plain = plain_message(result.message).rstrip(".")
+    if banner_name:
+        raw = next(card["message"] for card in snap["cards"] if card["name"] == banner_name)
+        if raw:
+            banner_plain = plain_message(str(raw)).rstrip(".")
     chip_href = url_for("monitor_list")
-    if len(down) == 1:
-        chip_href = url_for("monitor_detail", name=down[0].name)
-    elif down:
+    if counts["down"] == 1 and banner_name:
+        chip_href = url_for("monitor_detail", name=banner_name)
+    elif counts["down"]:
         chip_href = url_for("monitor_list", status="down")
     return {
-        "dot": dot,
-        "headline": headline if isinstance(headline, str) else "",
+        "dot": snap["status_dot"],
+        "headline": snap["hero_title"] if isinstance(snap["hero_title"], str) else "",
         "nav": _NAV.get(request.endpoint or "", ""),
-        "nav_incidents": len(active),
-        "nav_certs": certs,
-        "nav_failing": len(down),
-        "nav_total": len(records),
-        "nav_healthy": sum(1 for item in states if item == "up"),
-        "nav_names": [record.name for record in records],
-        "nav_items": _nav_rows(records, latest, now),
-        "nav_incident_rows": [
-            {"id": row.id, "monitor": row.monitor, "label": f"INC-{row.id:04d}"}
-            for row in repo.incidents()[:20]
-        ],
+        "nav_incidents": snap["open_incident_count"],
+        "nav_certs": counts["expiring"],
+        "nav_failing": counts["down"],
+        "nav_total": counts["total"],
+        "nav_healthy": counts["up"],
+        "nav_names": [card["name"] for card in snap["cards"]],
+        "nav_incident_rows": snap["palette_incidents"],
         "chip_href": chip_href,
         "banner_name": banner_name,
         "banner_plain": banner_plain,

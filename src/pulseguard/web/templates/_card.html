@@ -11,7 +11,7 @@
 <div class="mon-msg">{{ card.plain }}</div>
 <div class="mon-meta">
 <span>Checked <time datetime="{{ card.checked_at }}">{{ card.checked }}</time></span>
-<span class="next" title="Next check"><span class="cd" data-cd="{{ card.left }}" data-total="{{ card.interval }}"><span></span></span></span>
+<span class="next" title="Next check"><span class="cd" data-due="{{ card.next_check_at }}" data-total="{{ card.interval }}"><span></span></span></span>
 </div>
 {% if card.points|length > 1 %}
 <div class="spark" data-spark="{{ card.points|join(',') }}" style="height:34px"></div>
