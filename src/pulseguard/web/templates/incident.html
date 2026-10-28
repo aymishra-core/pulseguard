@@ -1,55 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Incident · PulseGuard{% endblock %}
-{% block crumb %}Incident{% endblock %}
-{% block body %}
-<h1>{{ row.monitor }}</h1>
-<p>
-  <span class="pill {{ row.state }}">{{ row.state }}</span>
-  <span {% if row.state == 'open' %}data-tick="{{ row.started_at }}"{% endif %}>{{ duration(row.started_at, row.ended_at) }}</span>
-</p>
-<ol class="timeline">
-  <li>
-    <time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time>
-    Detected. {{ row.reason }}
-    <span class="help">{{ hint_for(row.reason) }}</span>
-  </li>
-  {% for item in alerts %}
-  <li>
-    <time class="when" datetime="{{ stamp(item.created_at) }}">{{ clock(item.created_at) }}</time>
-    Alert {{ item.status }}. {% if item.error_text %}{{ item.error_text }}{% endif %}
-  </li>
-  {% endfor %}
-  {% for item in results %}
-  <li>
-    <time class="when" datetime="{{ stamp(item.checked_at) }}">{{ clock(item.checked_at) }}</time>
-    {% if item.ok %}A check succeeded.{% else %}Still failing.{% endif %}
-    {{ item.message }}
-    <span class="help">{{ hint_for(item.message) }}</span>
-  </li>
-  {% endfor %}
-  {% if row.ended_at %}
-  <li><time class="when" datetime="{{ stamp(row.ended_at) }}">{{ clock(row.ended_at) }}</time> Recovered.</li>
-  {% endif %}
-</ol>
-<p class="note">{{ advice }}</p>
-<p>
-  <a class="button" href="{{ url_for('incident_evidence', incident_id=row.id) }}">Download evidence pack</a>
-  <button type="button" class="btn-secondary" data-copy="{{ row.monitor }} is {{ row.state }} since {{ row.started_at }}. {{ row.reason }}">Copy summary</button>
-</p>
-{% if results %}
-<table>
-  <thead><tr><th>Checked</th><th>State</th><th>Message</th></tr></thead>
-  <tbody>
-    {% for item in results %}
-    <tr>
-      <td><time class="ago" datetime="{{ stamp(item.checked_at) }}">{{ clock(item.checked_at) }}</time></td>
-      <td>{% if item.ok %}up{% else %}down{% endif %}</td>
-      <td>{{ item.message }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="empty">No stored results in this window.</p>
-{% endif %}
+{% block title %}INC-{{ '%04d'|format(row.id) }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('incident_list') }}">Incidents</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>INC-{{ '%04d'|format(row.id) }}</span>{% endblock %}
+{% block page %}
+<div class="head">
+<div>
+<div class="eyebrow">INC-{{ '%04d'|format(row.id) }} · {{ row.state }}</div>
+<h1 class="title">{{ row.monitor }}</h1>
+<p class="sub">{{ row.reason or row.cause or 'Incident' }}</p>
+</div>
+<div class="actions">
+<a class="btn btn-primary" href="{{ url_for('incident_evidence', incident_id=row.id) }}"><svg class="i i-sm" aria-hidden="true"><use href="#file"/></svg>Evidence pack</a>
+<a class="btn" href="{{ url_for('monitor_detail', name=row.monitor) }}">Open monitor</a>
+</div>
+</div>
+<section class="stats">
+<article class="stat"><small>Status</small><b>{{ row.state }}</b></article>
+<article class="stat"><small>Open since</small><b><time datetime="{{ row.started_at }}">{{ clock(row.started_at) }}</time></b></article>
+<article class="stat"><small>Duration</small><b>{{ duration(row.started_at, row.ended_at) }}</b></article>
+<article class="stat"><small>Failed checks</small><b>{{ results|length }}</b></article>
+<article class="stat"><small>Alerts sent</small><b>{{ alerts|length }}</b></article>
+</section>
+<section class="card">
+<div class="card-head"><h3>Timeline</h3></div>
+<ul class="tl">
+<li><span class="nd"><svg class="i i-sm" aria-hidden="true"><use href="#alert"/></svg></span><div><b>Incident opened</b><p>{{ row.reason or row.cause }}</p></div><time datetime="{{ row.started_at }}">{{ clock(row.started_at) }}</time></li>
+{% for item in results %}
+<li><span class="nd"><svg class="i i-sm" aria-hidden="true"><use href="#{% if item.message == 'monitoring gap' %}clock{% elif item.ok %}check{% else %}x{% endif %}"/></svg></span><div><b>{% if item.message == 'monitoring gap' %}No data{% elif item.ok %}Check passed{% else %}Check failed{% endif %}</b><p>{% if item.message == 'monitoring gap' %}No data. A gap is not downtime.{% else %}{{ item.message }}{% endif %}</p></div><time datetime="{{ stamp(item.checked_at) }}">{{ clock(item.checked_at) }}</time></li>
+{% endfor %}
+{% for item in alerts %}
+<li><span class="nd"><svg class="i i-sm" aria-hidden="true"><use href="#mail"/></svg></span><div><b>Alert {{ item.status }}</b><p>{{ item.kind }} · {{ item.recipient }}</p></div><time datetime="{{ stamp(item.created_at) }}">{{ clock(item.created_at) }}</time></li>
+{% endfor %}
+</ul>
+</section>
+<section class="card card-pad">
+<h3>What to do</h3>
+<p>Detected <time datetime="{{ row.started_at }}">{{ clock(row.started_at) }}</time>. {{ hint_for(row.reason or row.cause or '') }}</p>
+<p>Open the monitor and compare it with what you expect. If the change is intended, use <a href="{{ url_for('monitor_edit', name=row.monitor) }}">Learn baseline</a> on the monitor.</p>
+<p>{{ advice }} This record is not legal advice.</p>
+</section>
 {% endblock %}

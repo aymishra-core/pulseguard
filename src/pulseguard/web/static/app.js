@@ -1,960 +1,184 @@
-(function () {
-  function readStore(key) {
-    try { return localStorage.getItem(key); } catch (err) { return null; }
-  }
-  function writeStore(key, value) {
-    try { localStorage.setItem(key, value); } catch (err) { /* private mode */ }
-  }
-  var root = document.documentElement;
-  var savedTheme = readStore("pulseguard-theme");
-  if (savedTheme === "light" || savedTheme === "dark") root.setAttribute("data-theme", savedTheme);
-  var themeButton = document.querySelector("#theme-toggle");
-  function themeLabel() {
-    var current = root.getAttribute("data-theme");
-    if (!current) current = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    if (themeButton) {
-      themeButton.setAttribute("aria-label", current === "dark" ? "Light theme" : "Dark theme");
-      themeButton.setAttribute("aria-pressed", current === "dark" ? "true" : "false");
-    }
-  }
-  themeLabel();
-  if (themeButton) {
-    themeButton.addEventListener("click", function () {
-      var current = root.getAttribute("data-theme");
-      if (!current) current = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      var next = current === "dark" ? "light" : "dark";
-      root.setAttribute("data-theme", next);
-      writeStore("pulseguard-theme", next);
-      themeLabel();
-    });
-  }
-  var headline = root.getAttribute("data-headline") || "";
-  var dot = root.getAttribute("data-dot") || "unknown";
-  if (dot === "down") {
-    var count = headline.split(" ")[0];
-    document.title = "(" + count + " down) " + document.title;
-  }
-  var shell = document.querySelector("#shell");
-  var collapse = document.querySelector("#nav-collapse");
-  if (shell && readStore("pulseguard-sidebar") === "collapsed") {
-    shell.classList.add("is-collapsed");
-    if (collapse) collapse.setAttribute("aria-pressed", "true");
-  }
-  if (collapse && shell) {
-    collapse.addEventListener("click", function () {
-      var closed = shell.classList.toggle("is-collapsed");
-      collapse.setAttribute("aria-pressed", closed ? "true" : "false");
-      writeStore("pulseguard-sidebar", closed ? "collapsed" : "open");
-    });
-  }
-  var path = location.pathname;
-  document.querySelectorAll(".nav a:not(.brand)").forEach(function (link) {
-    if (link.getAttribute("href") === path) link.setAttribute("aria-current", "page");
-  });
-  var palette = document.querySelector("#palette");
-  var paletteQuery = document.querySelector("#palette-query");
-  var paletteList = document.querySelector("#palette-list");
-  var paletteIndex = 0;
-  var pages = [
-    ["Dashboard", "/dashboard"],
-    ["Monitors", "/monitors"],
-    ["Add monitor", "/monitors/new"],
-    ["Incidents", "/incidents"],
-    ["Certificates", "/certificates"],
-    ["Alerts", "/alerts"],
-    ["SLA", "/sla"],
-    ["Agents", "/agents"],
-    ["Data", "/data"],
-    ["Settings", "/settings"],
-    ["Help", "/help"],
-    ["Public status", "/status"],
-    ["Run all checks now", "/monitors/run", "run"]
-  ];
-  var namesNode = document.querySelector("#nav-monitors");
-  var monitorNames = [];
-  if (namesNode) {
-    try { monitorNames = JSON.parse(namesNode.textContent || "[]"); } catch (err) { monitorNames = []; }
-  }
-  function paletteItems(query) {
-    var needle = (query || "").toLowerCase();
-    var items = pages.map(function (row) { return { label: row[0], href: row[1], action: row[2] || "" }; });
-    monitorNames.forEach(function (name) {
-      items.push({ label: "Monitor " + name, href: "/monitors/" + encodeURIComponent(name) + "/view" });
-    });
-    return items.filter(function (item) { return item.label.toLowerCase().indexOf(needle) !== -1; });
-  }
-  function paintPalette() {
-    if (!paletteList || !paletteQuery) return;
-    var items = paletteItems(paletteQuery.value);
-    if (paletteIndex >= items.length) paletteIndex = 0;
-    paletteList.textContent = "";
-    items.forEach(function (item, index) {
-      var li = document.createElement("li");
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "row";
-      button.textContent = item.label;
-      button.setAttribute("role", "option");
-      button.setAttribute("aria-selected", index === paletteIndex ? "true" : "false");
-      button.addEventListener("click", function () {
-        if (item.action === "run") {
-          var token = document.querySelector("input[name=csrf_token]");
-          var form = document.createElement("form");
-          form.method = "post";
-          form.action = item.href;
-          var field = document.createElement("input");
-          field.type = "hidden";
-          field.name = "csrf_token";
-          field.value = token ? token.value : "";
-          form.appendChild(field);
-          document.body.appendChild(form);
-          form.submit();
-          return;
-        }
-        location.href = item.href;
-      });
-      li.appendChild(button);
-      paletteList.appendChild(li);
-    });
-  }
-  function openPalette() {
-    if (!palette || !paletteQuery) return;
-    palette.hidden = false;
-    paletteIndex = 0;
-    paletteQuery.value = "";
-    paintPalette();
-    paletteQuery.focus();
-  }
-  function closePalette() {
-    if (palette) palette.hidden = true;
-  }
-  var paletteOpen = document.querySelector("#palette-open");
-  if (paletteOpen) paletteOpen.addEventListener("click", openPalette);
-  document.addEventListener("keydown", function (event) {
-    var key = event.key.toLowerCase();
-    if ((event.metaKey || event.ctrlKey) && key === "k") {
-      event.preventDefault();
-      if (palette && palette.hidden) openPalette();
-      else closePalette();
-      return;
-    }
-    if (!palette || palette.hidden) return;
-    if (event.key === "Escape") closePalette();
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      var total = paletteList ? paletteList.children.length : 0;
-      if (!total) return;
-      event.preventDefault();
-      paletteIndex = event.key === "ArrowDown" ? (paletteIndex + 1) % total : (paletteIndex - 1 + total) % total;
-      paintPalette();
-    }
-    if (event.key === "Enter" && paletteList) {
-      var chosen = paletteList.querySelector('[aria-selected="true"]');
-      if (chosen) chosen.click();
-    }
-  });
-  if (paletteQuery) paletteQuery.addEventListener("input", function () { paletteIndex = 0; paintPalette(); });
-  if (palette) palette.addEventListener("click", function (event) { if (event.target === palette) closePalette(); });
+/* PulseGuard console behaviour. Vanilla JS, no dependencies. */
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)},$$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var store={get:function(k){try{return localStorage.getItem(k)}catch(e){return null}},set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+var reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches;
+var NS="http://www.w3.org/2000/svg";
+function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e}
 
-  var kind = document.querySelector("#kind");
-  function showFields() {
-    if (!kind) return;
-    document.querySelectorAll("[data-kinds]").forEach(function (block) {
-      var kinds = block.getAttribute("data-kinds").split(" ");
-      block.hidden = kinds.indexOf(kind.value) === -1;
-    });
-  }
-  function showBaseline() {
-    var chosen = document.querySelector("input[name=baseline]:checked");
-    var mode = chosen ? chosen.value : "learn";
-    document.querySelectorAll("[data-baseline]").forEach(function (block) {
-      var on = block.getAttribute("data-baseline") === mode;
-      block.hidden = !on;
-      block.querySelectorAll("input, textarea, select").forEach(function (input) {
-        input.disabled = !on;
-      });
-    });
-  }
-  if (kind) {
-    kind.addEventListener("change", function () {
-      showFields();
-      showBaseline();
-    });
-    showFields();
-  }
-  document.querySelectorAll("input[name=baseline]").forEach(function (radio) {
-    radio.addEventListener("change", showBaseline);
-  });
-  showBaseline();
-  var named = document.querySelector("#name");
-  var monitorForm = named ? named.form : null;
-  var probeButton = document.querySelector("#probe");
-  var probeResult = document.querySelector("#probe-result");
-  var schemeOffer = document.querySelector("#scheme-offer");
-  var targetInput = document.querySelector("#target");
-  function offerScheme() {
-    if (!schemeOffer || !targetInput || !kind) return;
-    var httpKind = kind.value === "http" || kind.value === "keyword" || kind.value === "defacement";
-    var value = targetInput.value.trim();
-    if (httpKind && value && value.indexOf("://") === -1) {
-      schemeOffer.hidden = false;
-      schemeOffer.textContent = "";
-      var use = document.createElement("button");
-      use.type = "button";
-      use.className = "btn-secondary";
-      var scheme = "https:" + "//";
-      use.textContent = "Use " + scheme + value;
-      use.addEventListener("click", function () { targetInput.value = scheme + value; offerScheme(); });
-      schemeOffer.appendChild(document.createTextNode("This address has no scheme. "));
-      schemeOffer.appendChild(use);
-    } else {
-      schemeOffer.hidden = true;
-    }
-  }
-  if (targetInput) targetInput.addEventListener("input", offerScheme);
-  if (kind) kind.addEventListener("change", offerScheme);
-  if (probeButton && monitorForm) {
-    probeButton.addEventListener("click", function () {
-      probeButton.classList.add("is-loading");
-      var body = new FormData(monitorForm);
-      fetch("/monitors/probe", { method: "POST", body: body, headers: { Accept: "application/json" } })
-        .then(function (response) { return response.json().then(function (payload) { return { ok: response.ok, payload: payload }; }); })
-        .then(function (result) {
-          if (!probeResult) return;
-          probeResult.hidden = false;
-          if (!result.ok) probeResult.textContent = result.payload.error || "The check was not run.";
-          else probeResult.textContent = (result.payload.state || "") + " · " + result.payload.latency_ms + " ms · " + result.payload.message;
-        })
-        .finally(function () { probeButton.classList.remove("is-loading"); });
-    });
-  }
-  if (monitorForm && monitorForm.querySelector("#name")) {
-    var dirty = false;
-    monitorForm.addEventListener("input", function () { dirty = true; });
-    monitorForm.addEventListener("submit", function () { dirty = false; });
-    window.addEventListener("beforeunload", function (event) {
-      if (!dirty) return;
-      event.preventDefault();
-      event.returnValue = "";
-    });
-  }
-  document.querySelectorAll("[data-fill-target]").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var input = document.querySelector("#target");
-      if (input) input.value = button.getAttribute("data-fill-target") || "";
-    });
-  });
-  var helpSearch = document.querySelector("#help-search");
-  if (helpSearch) {
-    helpSearch.addEventListener("input", function () {
-      var needle = helpSearch.value.toLowerCase();
-      document.querySelectorAll("[data-guide] p").forEach(function (node) {
-        node.hidden = Boolean(needle) && node.textContent.toLowerCase().indexOf(needle) === -1;
-      });
-    });
-  }
-  var showAgain = document.querySelector("#show-onboarding");
-  if (showAgain) {
-    showAgain.addEventListener("click", function () {
-      writeStore("pulseguard-onboarding", "show");
-      showAgain.textContent = "The checklist will show on the dashboard.";
-    });
-  }
-  var checklist = document.querySelector("#onboarding");
-  if (checklist && readStore("pulseguard-onboarding") === "hide") checklist.hidden = true;
-  if (checklist && readStore("pulseguard-onboarding") === "show") checklist.hidden = false;
-  var hideChecklist = document.querySelector("#hide-onboarding");
-  if (hideChecklist && checklist) {
-    hideChecklist.addEventListener("click", function () {
-      writeStore("pulseguard-onboarding", "hide");
-      checklist.hidden = true;
-    });
-  }
-  var password = document.querySelector("#new_password");
-  if (password) {
-    var hint = document.createElement("p");
-    hint.className = "help";
-    hint.id = "strength";
-    password.insertAdjacentElement("afterend", hint);
-    password.addEventListener("input", function () {
-      var size = password.value.length;
-      hint.textContent = size === 0 ? "" : (size < 8 ? "Too short. Use at least 8 characters." : "Long enough.");
-    });
-  }
+/* theme */
+var root=document.documentElement,t0=store.get("pg-theme");if(t0)root.setAttribute("data-theme",t0);
+function isLight(){var t=root.getAttribute("data-theme");return t?t==="light":matchMedia("(prefers-color-scheme:light)").matches}
+$$("[data-theme-toggle]").forEach(function(b){b.addEventListener("click",function(){var n=isLight()?"dark":"light";root.setAttribute("data-theme",n);store.set("pg-theme",n);toast("ok","Theme set to "+n)})});
 
-  document.addEventListener("click", function (event) {
-    var button = event.target.closest("[data-copy]");
-    if (!button) return;
-    var value = button.getAttribute("data-copy") || "";
-    var done = function () {
-      button.textContent = "Copied";
-      var note = document.createElement("p");
-      note.className = "toast";
-      note.setAttribute("role", "status");
-      note.textContent = "Copied";
-      document.body.appendChild(note);
-      setTimeout(function () { note.remove(); }, 2000);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(value).then(done);
-      return;
-    }
-    var area = document.createElement("textarea");
-    area.value = value;
-    document.body.appendChild(area);
-    area.select();
-    document.execCommand("copy");
-    area.remove();
-    done();
-  });
+/* sidebar */
+var app=$(".app");
+if(app){
+  if(store.get("pg-collapsed")==="1")app.classList.add("is-collapsed");
+  $$("[data-collapse]").forEach(function(b){b.addEventListener("click",function(){app.classList.toggle("is-collapsed");store.set("pg-collapsed",app.classList.contains("is-collapsed")?"1":"0")})});
+  $$("[data-menu]").forEach(function(b){b.addEventListener("click",function(){app.classList.toggle("drawer")})});
+  document.addEventListener("click",function(e){if(app.classList.contains("drawer")&&!e.target.closest(".side")&&!e.target.closest("[data-menu]"))app.classList.remove("drawer")});
+}
 
-  document.querySelectorAll(".toast").forEach(function (toast) {
-    setTimeout(function () { toast.remove(); }, 6000);
-  });
+/* toast */
+function toast(kind,msg){var h=$(".toasts");if(!h){h=document.createElement("div");h.className="toasts";h.setAttribute("aria-live","polite");document.body.appendChild(h)}
+  var t=document.createElement("div");t.className="toast "+kind;t.innerHTML='<svg class="i"><use href="#'+(kind==="bad"?"x-circle":"check-circle")+'"/></svg><span></span>';t.lastChild.textContent=msg;h.appendChild(t);setTimeout(function(){t.style.transition="opacity .3s";t.style.opacity=0;setTimeout(function(){t.remove()},300)},2800)}
+window.pgToast=toast;
 
-  var filters = document.querySelector("#filter-kind");
-  function applyFilter() {
-    var kindValue = document.querySelector("#filter-kind");
-    var stateValue = document.querySelector("#filter-state");
-    var queryValue = document.querySelector("#filter-query");
-    var kindText = kindValue ? kindValue.value : "";
-    var stateText = stateValue ? stateValue.value : "";
-    var query = queryValue ? queryValue.value.toLowerCase() : "";
-    document.querySelectorAll("[data-monitor]").forEach(function (card) {
-      var okKind = !kindText || card.getAttribute("data-kind") === kindText;
-      var okState = !stateText || card.getAttribute("data-state") === stateText;
-      var name = (card.getAttribute("data-name") || "").toLowerCase();
-      card.hidden = !(okKind && okState && name.indexOf(query) !== -1);
-    });
-  }
-  if (filters) {
-    ["#filter-kind", "#filter-state", "#filter-query"].forEach(function (selector) {
-      var node = document.querySelector(selector);
-      if (node) node.addEventListener("input", applyFilter);
-    });
-  }
+/* copy */
+document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(!b)return;var v=b.getAttribute("data-copy");
+  if(navigator.clipboard)navigator.clipboard.writeText(v).catch(function(){});toast("ok","Copied to clipboard")});
 
-  var board = document.querySelector("[data-board]");
-  var label = document.querySelector("[data-updated]");
-  var at = Date.now();
+/* count up */
+function countUp(n){var to=parseFloat(n.getAttribute("data-count")),dec=+(n.getAttribute("data-dec")||0),suf=n.getAttribute("data-suf")||"";
+  function set(v){n.innerHTML=v.toFixed(dec)+(suf?"<small>"+suf+"</small>":"")}
+  if(reduce){set(to);return}var s=performance.now(),d=900;
+  (function f(t){var p=Math.min(1,(t-s)/d);set(to*(1-Math.pow(1-p,3)));if(p<1)requestAnimationFrame(f)})(s)}
+$$("[data-count]").forEach(countUp);
 
-  function spark(points) {
-    if (!points || points.length < 2) return null;
-    var width = 120;
-    var height = 36;
-    var peak = Math.max.apply(null, points) || 1;
-    var step = width / (points.length - 1);
-    var coords = points.map(function (value, index) {
-      var y = height - (value / peak) * (height - 8) - 4;
-      return (index * step).toFixed(1) + "," + y.toFixed(1);
-    }).join(" ");
-    var svgNs = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(svgNs, "svg");
-    svg.setAttribute("class", "spark");
-    svg.setAttribute("viewBox", "0 0 120 36");
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "latency");
-    var line = document.createElementNS(svgNs, "polyline");
-    line.setAttribute("fill", "none");
-    line.setAttribute("points", coords);
-    svg.appendChild(line);
-    return svg;
-  }
+/* sparkline: data-spark="1,2,3" */
+function spark(n){var v=n.getAttribute("data-spark").split(",").map(Number).filter(function(x){return !isNaN(x)});if(v.length<2)return;var w=120,h=36,mn=Math.min.apply(0,v),mx=Math.max.apply(0,v),r=(mx-mn)||1;
+  var pts=v.map(function(y,i){return [i*(w/(v.length-1)),h-3-((y-mn)/r)*(h-8)]});
+  var d=pts.map(function(p,i){return(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)}).join(" ");
+  var id="s"+Math.random().toString(36).slice(2,7);
+  var s=el("svg",{viewBox:"0 0 "+w+" "+h,preserveAspectRatio:"none","aria-hidden":"true"});
+  var g=el("linearGradient",{id:id,x1:0,y1:0,x2:0,y2:1});g.appendChild(el("stop",{offset:"0","stop-color":"currentColor","stop-opacity":".28"}));g.appendChild(el("stop",{offset:"1","stop-color":"currentColor","stop-opacity":"0"}));
+  var df=el("defs",{});df.appendChild(g);s.appendChild(df);
+  s.appendChild(el("path",{d:d+" L"+w+" "+h+" L0 "+h+" Z",fill:"url(#"+id+")"}));
+  s.appendChild(el("path",{d:d,fill:"none",stroke:"currentColor","stroke-width":"1.8","stroke-linecap":"round","stroke-linejoin":"round","vector-effect":"non-scaling-stroke"}));
+  n.appendChild(s)}
+$$("[data-spark]").forEach(spark);
 
-  function localTime(value) {
-    var date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    var seconds = Math.round((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return Math.max(0, seconds) + " s ago";
-    if (seconds < 3600) return Math.round(seconds / 60) + " m ago";
-    if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
-    return friendlyTime(value);
-  }
-  function friendlyTime(value) {
-    var date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    var now = new Date();
-    var time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    var day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    var apart = Math.round((today.getTime() - day.getTime()) / 86400000);
-    if (apart === 0) return "Today " + time;
-    if (apart === 1) return "yesterday " + time;
-    return date.toLocaleDateString([], { day: "numeric", month: "short" }) + " " + time;
-  }
-  function exactTime(value) {
-    var date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toLocaleString();
-  }
-  function paintTicks() {
-    document.querySelectorAll("[data-tick]").forEach(function (node) {
-      var start = new Date(node.getAttribute("data-tick"));
-      if (Number.isNaN(start.getTime())) return;
-      var seconds = Math.max(0, Math.round((Date.now() - start.getTime()) / 1000));
-      var minutes = Math.floor(seconds / 60);
-      var hours = Math.floor(minutes / 60);
-      minutes %= 60;
-      var sec = seconds % 60;
-      if (hours) node.textContent = hours + "h " + minutes + "m";
-      else if (minutes) node.textContent = minutes + "m " + sec + "s";
-      else node.textContent = sec + "s";
-    });
-  }
-  function paintTimes() {
-    document.querySelectorAll("time[datetime]").forEach(function (node) {
-      var exact = new Date(node.getAttribute("datetime"));
-      if (Number.isNaN(exact.getTime())) return;
-      var raw = node.getAttribute("datetime");
-      node.textContent = node.classList.contains("ago") ? localTime(raw) : friendlyTime(raw);
-      node.setAttribute("title", exactTime(raw));
-    });
-    var zone = document.querySelector("#zone");
-    if (zone) {
-      var name = "";
-      try { name = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (err) { name = ""; }
-      zone.textContent = "Times are shown in " + (name || "your local time zone") + ".";
-    }
-    document.querySelectorAll("[data-checked]").forEach(function (card) {
-      var label = card.querySelector(".next-check");
-      var stamp = card.getAttribute("data-checked");
-      var interval = Number(card.getAttribute("data-interval") || "30");
-      if (!label || !stamp) return;
-      var age = (Date.now() - new Date(stamp).getTime()) / 1000;
-      var left = Math.max(0, Math.round(interval - age));
-      label.textContent = left ? String(left) : "0";
-      label.setAttribute("aria-label", left ? "Next check in " + left + " s" : "Check due");
-    });
-  }
-  paintTimes();
-  paintTicks();
-  setInterval(function () { paintTimes(); paintTicks(); }, 1000);
-  document.querySelectorAll("[data-count]").forEach(function (node) {
-    var target = Number(node.getAttribute("data-count"));
-    if (!Number.isFinite(target)) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    var begun = performance.now();
-    function frame(now) {
-      var t = Math.min(1, (now - begun) / 400);
-      node.textContent = String(Math.round(target * (1 - Math.pow(1 - t, 3))));
-      if (t < 1) requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  });
-  var stepPanels = document.querySelectorAll("[data-step]");
-  var stepIndex = 1;
-  function fillReview() {
-    var box = document.querySelector("#review");
-    var kindField = document.querySelector("#kind");
-    var nameField = document.querySelector("#name");
-    var targetField = document.querySelector("#target");
-    if (!box) return;
-    box.textContent = "";
-    [ "Kind: " + (kindField ? kindField.value : ""), "Name: " + (nameField ? nameField.value : ""), "Target: " + (targetField ? targetField.value : "") ].forEach(function (line) {
-      var row = document.createElement("p");
-      row.textContent = line;
-      box.appendChild(row);
-    });
-  }
-  function showStep(next) {
-    stepIndex = next;
-    stepPanels.forEach(function (panel) {
-      panel.hidden = Number(panel.getAttribute("data-step")) !== stepIndex;
-    });
-    document.querySelectorAll("[data-step-tab]").forEach(function (tab) {
-      tab.classList.toggle("on", Number(tab.getAttribute("data-step-tab")) === stepIndex);
-    });
-    var back = document.querySelector("#step-back");
-    var forward = document.querySelector("#step-next");
-    var save = document.querySelector("#save-monitor");
-    if (back) back.hidden = stepIndex === 1;
-    if (forward) forward.hidden = stepIndex === 3;
-    if (save) save.hidden = stepIndex !== 3;
-    if (stepIndex === 3) fillReview();
-  }
-  if (stepPanels.length) {
-    showStep(1);
-    var backBtn = document.querySelector("#step-back");
-    var nextBtn = document.querySelector("#step-next");
-    if (backBtn) backBtn.addEventListener("click", function () { showStep(Math.max(1, stepIndex - 1)); });
-    if (nextBtn) nextBtn.addEventListener("click", function () { showStep(Math.min(3, stepIndex + 1)); });
-    document.querySelectorAll("[data-step-tab]").forEach(function (tab) {
-      tab.addEventListener("click", function () {
-        showStep(Number(tab.getAttribute("data-step-tab")) || 1);
-      });
-    });
-  }
-  document.querySelectorAll("table[data-more]").forEach(function (table) {
-    var rows = table.querySelectorAll("tbody tr");
-    var shown = 12;
-    if (rows.length <= shown) return;
-    function paintRows() {
-      rows.forEach(function (row, index) { row.hidden = index >= shown; });
-    }
-    paintRows();
-    var more = document.createElement("button");
-    more.type = "button";
-    more.className = "btn-secondary";
-    more.textContent = "Load more";
-    more.addEventListener("click", function () {
-      shown += 12;
-      paintRows();
-      if (shown >= rows.length) more.hidden = true;
-    });
-    table.insertAdjacentElement("afterend", more);
-  });
-  var chartNode = document.querySelector("#chart-data");
-  var chartCanvas = document.querySelector("#chart-canvas");
-  if (chartNode && chartCanvas) {
-    var samples = [];
-    try { samples = JSON.parse(chartNode.textContent || "[]"); } catch (err) { samples = []; }
-    function quantile(values, q) {
-      if (!values.length) return 0;
-      var sorted = values.slice().sort(function (a, b) { return a - b; });
-      var index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1));
-      return sorted[index];
-    }
-    function drawChart(hours) {
-      var cutoff = Date.now() - hours * 3600000;
-      var rows = samples.filter(function (row) { return new Date(row[0]).getTime() >= cutoff; });
-      if (rows.length < 2) rows = samples.slice(-Math.min(samples.length, 24));
-      var width = 640;
-      var height = 160;
-      var values = rows.map(function (row) { return Number(row[1]) || 0; });
-      var low = Math.min.apply(null, values.concat([0]));
-      var high = Math.max.apply(null, values.concat([low + 1]));
-      var svgNs = "http://www.w3.org/2000/svg";
-      var svg = document.createElementNS(svgNs, "svg");
-      svg.setAttribute("class", "spark chart");
-      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
-      svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", "latency");
-      function yOf(value) {
-        return (height - ((value - low) / (high - low)) * (height - 28) - 14).toFixed(1);
-      }
-      [0.5, 0.95].forEach(function (q) {
-        var guide = document.createElementNS(svgNs, "line");
-        var y = yOf(quantile(values, q));
-        guide.setAttribute("x1", "0");
-        guide.setAttribute("x2", String(width));
-        guide.setAttribute("y1", y);
-        guide.setAttribute("y2", y);
-        guide.setAttribute("class", q === 0.5 ? "p50" : "p95");
-        svg.appendChild(guide);
-      });
-      var coords = rows.map(function (row, index) {
-        var x = rows.length === 1 ? 0 : (index * width / (rows.length - 1)).toFixed(1);
-        return x + "," + yOf(Number(row[1]) || 0);
-      }).join(" ");
-      var line = document.createElementNS(svgNs, "polyline");
-      line.setAttribute("fill", "none");
-      line.setAttribute("points", coords);
-      svg.appendChild(line);
-      rows.forEach(function (row, index) {
-        if (row[2]) return;
-        var tick = document.createElementNS(svgNs, "line");
-        var x = rows.length === 1 ? 0 : index * width / (rows.length - 1);
-        tick.setAttribute("x1", x.toFixed(1));
-        tick.setAttribute("x2", x.toFixed(1));
-        tick.setAttribute("y1", String(height - 4));
-        tick.setAttribute("y2", String(height));
-        tick.setAttribute("class", "fail");
-        svg.appendChild(tick);
-      });
-      chartCanvas.textContent = "";
-      chartCanvas.appendChild(svg);
-      svg.addEventListener("mousemove", function (event) {
-        var bounds = svg.getBoundingClientRect();
-        var ratio = bounds.width ? (event.clientX - bounds.left) / bounds.width : 0;
-        var index = Math.max(0, Math.min(rows.length - 1, Math.round(ratio * (rows.length - 1))));
-        var tip = document.querySelector("#chart-tip");
-        if (tip) tip.textContent = Math.round(Number(rows[index][1]) || 0) + " ms · " + exactTime(rows[index][0]);
-      });
-    }
-    document.querySelectorAll("#chart-range button").forEach(function (button) {
-      button.addEventListener("click", function () {
-        document.querySelectorAll("#chart-range button").forEach(function (other) {
-          other.setAttribute("aria-pressed", other === button ? "true" : "false");
-        });
-        drawChart(Number(button.getAttribute("data-range")) || 24);
-      });
-    });
-    if (samples.length) drawChart(24);
-  }
-  document.querySelectorAll("[data-pick-kind]").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var select = document.querySelector("#kind");
-      if (!select) return;
-      select.value = button.getAttribute("data-pick-kind") || select.value;
-      select.dispatchEvent(new Event("change"));
-      document.querySelectorAll("[data-pick-kind]").forEach(function (other) {
-        other.classList.toggle("is-on", other === button);
-      });
-    });
-  });
-  var nameField = document.querySelector("#name");
-  if (nameField) {
-    nameField.addEventListener("input", function () {
-      var bad = nameField.value && !/^[A-Za-z0-9_-]{1,128}$/.test(nameField.value);
-      nameField.setAttribute("aria-invalid", bad ? "true" : "false");
-    });
-  }
-  document.querySelectorAll("input[type=file]").forEach(function (input) {
-    input.addEventListener("change", function () {
-      var meta = input.parentElement && input.parentElement.querySelector(".file-meta");
-      var file = input.files && input.files[0];
-      if (!meta) return;
-      meta.textContent = file ? file.name + " · " + file.size + " bytes" : "";
-    });
-    var zone = input.closest(".drop");
-    if (!zone) return;
-    zone.addEventListener("dragover", function (event) { event.preventDefault(); });
-    zone.addEventListener("drop", function (event) {
-      event.preventDefault();
-      if (event.dataTransfer && event.dataTransfer.files.length) {
-        input.files = event.dataTransfer.files;
-        input.dispatchEvent(new Event("change"));
-      }
-    });
-  });
-  var slaResult = document.querySelector(".result");
-  var slaGauge = document.querySelector("#sla-gauge");
-  if (slaResult && slaGauge) {
-    var achieved = slaResult.textContent.match(/Achieved ([0-9.]+)%/);
-    if (achieved) slaGauge.value = Number(achieved[1]);
-  }
-  document.addEventListener("click", function (event) {
-    var opener = event.target.closest("[data-open]");
-    if (opener) {
-      var dialog = document.getElementById(opener.getAttribute("data-open"));
-      if (dialog && dialog.showModal) dialog.showModal();
-    }
-    var closer = event.target.closest("[data-close]");
-    if (closer) {
-      var box = closer.closest("dialog");
-      if (box && box.close) box.close();
-    }
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") {
-      document.querySelectorAll("dialog[open]").forEach(function (dialog) { dialog.close(); });
-    }
-  });
-  var sort = document.querySelector("#filter-sort");
-  if (sort && readStore("pulseguard-sort")) sort.value = readStore("pulseguard-sort");
-  if (filters && readStore("pulseguard-kind")) {
-    var kindFilter = document.querySelector("#filter-kind");
-    if (kindFilter) kindFilter.value = readStore("pulseguard-kind");
-  }
+/* uptime bars: data-bar="o48" pattern string: o=ok x=down g=gap w=warn */
+$$("[data-bar]").forEach(function(b){var p=b.getAttribute("data-bar"),map={o:"",x:"bad",g:"gap",w:"warn"},lab={o:"Operational",x:"Down",g:"No data",w:"Degraded"};
+  for(var i=0;i<p.length;i++){var s=document.createElement("i");if(map[p[i]])s.className=map[p[i]];s.title=lab[p[i]];b.appendChild(s)}});
 
-  function paintShell(body, counts) {
-    var down = Number(counts.down || 0);
-    var up = Number(counts.up || 0);
-    var open = Number(body.open_incidents || 0);
-    var dot = "unknown";
-    var line = "Waiting for the first checks";
-    var detail = "Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.";
-    if (down === 1) {
-      dot = "down";
-      line = "1 monitor down";
-      detail = "Look at the down cards first. Run a check now if you just changed something.";
-    } else if (down > 1) {
-      dot = "down";
-      line = down + " monitors down";
-      detail = "Look at the down cards first. Run a check now if you just changed something.";
-    }
-    else if (up > 0) {
-      dot = "up";
-      line = "All systems operational";
-      detail = "Every enabled monitor answered its last check.";
-    } else if (Number(counts.paused || 0) > 0) {
-      dot = "paused";
-      line = "All monitors are paused";
-    }
-    var headline = document.querySelector("#headline");
-    var pill = document.querySelector(".headline .pill");
-    var ring = document.querySelector("#hero-ring");
-    var title = document.querySelector("#hero-title");
-    if (headline) headline.textContent = line;
-    if (pill) { pill.className = "pill " + dot; pill.textContent = dot; }
-    if (ring) {
-      var ringState = body.ring || (open || down ? "down" : dot);
-      ring.className = "ring " + ringState;
-      var glyph = ring.querySelector("use");
-      var iconName = ringState === "up" ? "#i-check" : (ringState === "paused" ? "#i-pause" : (ringState === "down" ? "#i-x" : "#i-alert"));
-      if (glyph) glyph.setAttribute("href", iconName);
-      var kicker = document.querySelector("#hero-kicker");
-      if (kicker) {
-        kicker.className = "eyebrow" + (ringState === "down" ? " live" : (ringState === "up" ? " ok" : (ringState === "warn" ? " warn" : "")));
-        kicker.textContent = ringState === "down"
-          ? "Incident active · monitoring live"
-          : (ringState === "up" ? "All clear · monitoring live" : (ringState === "paused" ? "Paused · monitoring live" : "Waiting · monitoring live"));
-      }
-    }
-    if (title) {
-      title.textContent = open ? (open === 1 ? "One service needs attention" : "Services need attention") : line;
-      var detailNode = document.querySelector("#hero-detail");
-      if (detailNode) {
-        detailNode.textContent = "";
-        if (open) {
-          detailNode.appendChild(document.createTextNode("Ongoing for "));
-          var tick = document.createElement("span");
-          if (body.incident_since) tick.setAttribute("data-tick", body.incident_since);
-          detailNode.appendChild(tick);
-          if (body.incident_name) detailNode.appendChild(document.createTextNode(" · " + body.incident_name));
-          if (body.incident_plain) detailNode.appendChild(document.createTextNode(" · " + body.incident_plain));
-          paintTicks();
-        } else {
-          detailNode.textContent = detail;
-        }
-      }
-    }
-    var opener = document.querySelector("#hero-open");
-    if (opener) {
-      opener.hidden = !open;
-      opener.setAttribute("href", open === 1 && body.incident_id ? "/incidents/" + body.incident_id : "/incidents");
-    }
-    var cycle = document.querySelector("#hero-cycle");
-    if (cycle && body.last_cycle) cycle.setAttribute("datetime", body.last_cycle);
-    if (dot === "down") document.title = "(" + down + " down) " + document.title.replace(/^\(\d+ down\) /, "");
-    else document.title = document.title.replace(/^\(\d+ down\) /, "");
-    var icon = document.querySelector("link[rel='icon']");
-    if (icon && icon.getAttribute("href")) {
-      icon.setAttribute("href", icon.getAttribute("href").replace(/favicon-[a-z]+\.svg/, "favicon-" + dot + ".svg"));
-    }
-    var banner = document.querySelector(".banner");
-    var main = document.querySelector(".main");
-    if (open && main) {
-      if (!banner) {
-        banner = document.createElement("p");
-        banner.className = "banner";
-        banner.setAttribute("role", "status");
-        main.insertBefore(banner, main.querySelector("main"));
-      }
-      banner.textContent = "";
-      var note = document.createElement("span");
-      note.textContent = open === 1
-        ? "1 incident is affecting monitored services"
-        : open + " incidents are affecting monitored services";
-      var see = document.createElement("a");
-      see.href = "/incidents";
-      see.textContent = "Review incident";
-      banner.appendChild(note);
-      banner.appendChild(see);
-    } else if (banner) {
-      banner.remove();
-    }
-    document.querySelectorAll(".nav a").forEach(function (link) {
-      if (link.getAttribute("href") !== "/incidents") return;
-      var badge = link.querySelector(".badge");
-      if (!open) {
-        if (badge) badge.remove();
-        return;
-      }
-      if (!badge) {
-        badge = document.createElement("span");
-        badge.className = "badge";
-        link.appendChild(badge);
-      }
-      badge.textContent = String(open);
-    });
-  }
+/* countdown rings */
+$$("[data-cd]").forEach(function(n){var tot=+n.getAttribute("data-total")||60,left=+n.getAttribute("data-cd");var lab=$("span",n);
+  function paint(){n.style.setProperty("--p",((tot-left)/tot*100).toFixed(1));lab.textContent=left>=100?Math.round(left/60)+"m":left+"s"}paint();
+  setInterval(function(){left--;if(left<0){left=tot;n.classList.add("pulse")}paint()},1000)});
 
-  function paint(body) {
-    var counts = body.counts || {};
-    paintShell(body, counts);
-    document.querySelectorAll(".summary article").forEach(function (article) {
-      var title = article.querySelector("h2");
-      var value = article.querySelector("p");
-      if (!title || !value) return;
-      var name = title.textContent;
-      if (name === "Up") value.textContent = counts.up;
-      if (name === "Down") value.textContent = counts.down;
-      if (name === "Unknown") value.textContent = counts.unknown;
-      if (name === "Incidents") value.textContent = body.open_incidents;
-      if (name === "Expiring") value.textContent = body.certs;
-      if (name === "Uptime") value.textContent = body.uptime;
-    });
-    board.textContent = "";
-    var kindIcons = { http: "i-globe", keyword: "i-text", defacement: "i-shield", tcp: "i-plug", dns: "i-search", tls: "i-lock", heartbeat: "i-heart" };
-    (body.monitors || []).forEach(function (monitor) {
-      var card = document.createElement("article");
-      card.className = "card";
-      card.setAttribute("data-monitor", "");
-      card.setAttribute("data-kind", monitor.kind);
-      card.setAttribute("data-state", monitor.state);
-      card.setAttribute("data-name", monitor.name);
-      card.setAttribute("data-interval", String(monitor.interval || 30));
-      card.setAttribute("data-checked", monitor.checked_at || "");
-      var top = document.createElement("div");
-      top.className = "card-top";
-      var iconWrap = document.createElement("span");
-      iconWrap.className = "kind-icon";
-      iconWrap.setAttribute("aria-hidden", "true");
-      var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      icon.setAttribute("class", "icon");
-      var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-      use.setAttribute("href", "#" + (kindIcons[monitor.kind] || "i-heart"));
-      icon.appendChild(use);
-      iconWrap.appendChild(icon);
-      var ident = document.createElement("div");
-      ident.className = "card-id";
-      var heading = document.createElement("h2");
-      var link = document.createElement("a");
-      link.href = "/monitors/" + encodeURIComponent(monitor.name) + "/view";
-      link.textContent = monitor.name;
-      heading.appendChild(link);
-      var target = document.createElement("p");
-      target.className = "mono";
-      target.textContent = monitor.target || "";
-      ident.appendChild(heading);
-      ident.appendChild(target);
-      var pill = document.createElement("span");
-      pill.className = "pill " + monitor.state;
-      pill.textContent = monitor.state;
-      top.appendChild(iconWrap);
-      top.appendChild(ident);
-      top.appendChild(pill);
-      var message = document.createElement("p");
-      message.textContent = monitor.plain || monitor.message || "no results yet";
-      var meta = document.createElement("div");
-      meta.className = "card-meta";
-      var checked = document.createElement("p");
-      checked.className = "muted";
-      checked.appendChild(document.createTextNode("Last checked "));
-      var time = document.createElement("time");
-      time.className = "ago";
-      if (monitor.checked_at) {
-        time.setAttribute("datetime", monitor.checked_at);
-        time.textContent = monitor.checked || "not checked";
-      } else {
-        time.textContent = "not checked";
-      }
-      checked.appendChild(time);
-      var next = document.createElement("p");
-      next.className = "next-check";
-      next.textContent = String(monitor.interval || "");
-      meta.appendChild(checked);
-      meta.appendChild(next);
-      var uptime = document.createElement("p");
-      uptime.className = "uptime-label";
-      uptime.textContent = "24 h uptime " + monitor.uptime;
-      var bar = document.createElement("p");
-      bar.className = "uptime-bar";
-      bar.setAttribute("aria-label", "24 hour uptime bar");
-      (monitor.segments || []).forEach(function (part) {
-        var seg = document.createElement("i");
-        seg.className = "seg " + (part === "empty" ? "miss" : part);
-        seg.setAttribute("data-tooltip", part === "gap" || part === "empty" ? "no data" : part);
-        bar.appendChild(seg);
-      });
-      var foot = document.createElement("div");
-      foot.className = "card-foot";
-      var kindText = document.createElement("span");
-      kindText.className = "kind";
-      kindText.textContent = monitor.kind + " · " + monitor.interval + "s";
-      foot.appendChild(kindText);
-      var drawn = spark(monitor.points || []);
-      if (drawn) foot.appendChild(drawn);
-      var form = document.createElement("form");
-      form.method = "post";
-      form.action = "/monitors/" + encodeURIComponent(monitor.name) + "/check";
-      var csrf = document.createElement("input");
-      csrf.type = "hidden";
-      csrf.name = "csrf_token";
-      var tokenInput = document.querySelector("input[name=csrf_token]");
-      csrf.value = tokenInput ? tokenInput.value : "";
-      var run = document.createElement("button");
-      run.type = "submit";
-      run.className = "btn-ghost";
-      run.textContent = "Run now";
-      form.appendChild(csrf);
-      form.appendChild(run);
-      foot.appendChild(form);
-      card.appendChild(top);
-      card.appendChild(message);
-      card.appendChild(meta);
-      card.appendChild(uptime);
-      card.appendChild(bar);
-      card.appendChild(foot);
-      board.appendChild(card);
-    });
-    var feed = document.querySelector("#activity");
-    if (feed && body.activity) {
-      feed.textContent = "";
-      if (!body.activity.length) {
-        var empty = document.createElement("li");
-        empty.textContent = "No changes yet.";
-        feed.appendChild(empty);
-      }
-      body.activity.forEach(function (event) {
-        var item = document.createElement("li");
-        var mark = document.createElement("span");
-        mark.className = "state-dot " + event.state;
-        mark.setAttribute("aria-hidden", "true");
-        var text = document.createElement("span");
-        text.className = "activity-text";
-        text.textContent = event.text;
-        var when = document.createElement("time");
-        when.className = "ago";
-        when.setAttribute("datetime", event.at);
-        item.appendChild(mark);
-        item.appendChild(text);
-        item.appendChild(when);
-        feed.appendChild(item);
-      });
-    }
-    var stream = document.querySelector("#stream");
-    if (stream && body.stream) {
-      stream.textContent = "";
-      if (!body.stream.length) {
-        var none = document.createElement("li");
-        none.textContent = "No results yet.";
-        stream.appendChild(none);
-      }
-      body.stream.forEach(function (row) {
-        var item = document.createElement("li");
-        var when = document.createElement("time");
-        when.className = "ago";
-        when.setAttribute("datetime", row.at || "");
-        var mark = document.createElement("span");
-        mark.className = "mark " + String(row.mark || "").toLowerCase();
-        mark.textContent = row.mark || "";
-        var name = document.createElement("span");
-        name.textContent = row.name || "";
-        var msg = document.createElement("span");
-        msg.className = "stream-msg";
-        msg.textContent = row.plain || "";
-        var latency = document.createElement("span");
-        latency.className = "num";
-        latency.textContent = row.latency + " ms";
-        item.appendChild(when);
-        item.appendChild(mark);
-        item.appendChild(name);
-        item.appendChild(msg);
-        item.appendChild(latency);
-        stream.appendChild(item);
-      });
-    }
-    applyFilter();
-    paintTimes();
-  }
+/* tabs filter: [data-tabs] buttons data-f ; targets [data-st] */
+$$("[data-tabs]").forEach(function(g){var tg=$(g.getAttribute("data-tabs"));
+  $$("button",g).forEach(function(b){b.addEventListener("click",function(){$$("button",g).forEach(function(x){x.setAttribute("aria-selected",x===b)});var f=b.getAttribute("data-f");
+    $$("[data-st]",tg).forEach(function(c){c.hidden=!(f==="all"||c.getAttribute("data-st")===f||(f==="attn"&&/down|warn/.test(c.getAttribute("data-st"))))})})})});
+$$("[data-search]").forEach(function(i){var tg=$(i.getAttribute("data-search"));i.addEventListener("input",function(){var q=i.value.toLowerCase();$$("[data-st]",tg).forEach(function(c){c.hidden=q&&c.textContent.toLowerCase().indexOf(q)<0})})});
 
-  function pull() {
-    fetch("/api/dashboard", { headers: { Accept: "application/json" } }).then(function (response) {
-      if (!response.ok) return null;
-      return response.json();
-    }).then(function (body) {
-      if (!body) return;
-      paint(body);
-      at = Date.now();
-    });
-  }
+/* switches */
+$$(".switch").forEach(function(s){s.addEventListener("click",function(){var on=s.getAttribute("aria-checked")!=="true";s.setAttribute("aria-checked",on);var box=document.getElementById(s.getAttribute("aria-controls")||"");if(box)box.checked=on;toast("ok",(s.getAttribute("data-label")||"Setting")+(on?" enabled":" disabled"))})});
 
-  if (board && label) {
-    setInterval(pull, 5000);
-    setInterval(function () {
-      var seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-      label.textContent = "updated " + seconds + " s ago";
-    }, 1000);
-  }
+/* busy buttons: data-busy="msg" */
+$$("[data-busy]").forEach(function(b){b.addEventListener("click",function(e){e.preventDefault();if(b.classList.contains("is-busy"))return;b.classList.add("is-busy");setTimeout(function(){b.classList.remove("is-busy");toast("ok",b.getAttribute("data-busy"))},1100)})});
+$$("[data-toast]").forEach(function(b){b.addEventListener("click",function(e){if(b.tagName==="A"&&b.getAttribute("href")==="#")e.preventDefault();toast(b.getAttribute("data-kind")||"ok",b.getAttribute("data-toast"))})});
+
+/* dialogs */
+function open(id){var o=document.getElementById(id);if(o){o.classList.add("on");var i=$("input",o);if(i)setTimeout(function(){i.focus()},30)}}
+function close(){$$(".ov.on").forEach(function(o){o.classList.remove("on")})}
+$$("[data-open]").forEach(function(b){b.addEventListener("click",function(){open(b.getAttribute("data-open"))})});
+$$(".ov").forEach(function(o){o.addEventListener("mousedown",function(e){if(e.target===o)close()})});
+$$("[data-close]").forEach(function(b){b.addEventListener("click",close)});
+
+/* palette */
+var pal=$("#pal");
+if(pal){var inp=$("input",pal),list=$(".pal-list",pal),items=$$("li",list),sel=0;
+  function show(){var q=inp.value.toLowerCase(),vis=items.filter(function(li){var m=!q||li.textContent.toLowerCase().indexOf(q)>=0;li.hidden=!m;return m});sel=0;vis.forEach(function(li,i){li.setAttribute("aria-selected",i===0)});pal._v=vis}
+  inp.addEventListener("input",show);
+  inp.addEventListener("keydown",function(e){var v=pal._v||items;if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();sel=(sel+(e.key==="ArrowDown"?1:-1)+v.length)%v.length;v.forEach(function(li,i){li.setAttribute("aria-selected",i===sel)})}
+    if(e.key==="Enter"&&v[sel]){var link=$("a",v[sel]);if(link)location.href=link.getAttribute("href")}});
+  document.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();open("pal");inp.value="";show()}});
+}
+document.addEventListener("keydown",function(e){if(e.key==="Escape")close()});
+
+/* activity log */
+var log=$("[data-log]");
+function paintLog(events){if(!log||!events||!events.length)return;log.textContent="";
+  events.slice(0,10).forEach(function(ev){var r=document.createElement("div"),when=new Date(ev.at||""),ts="";
+    if(!isNaN(when.getTime()))ts=when.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    r.innerHTML='<span class="ts"></span> <span class="lv"></span> <span></span>';
+    r.children[0].textContent=ts;r.children[1].textContent=(ev.state||"info").toUpperCase();
+    r.children[1].className="lv "+(ev.state==="down"?"bad":ev.state==="up"?"ok":"wn");
+    r.children[2].textContent=ev.text||"";log.appendChild(r)});}
+function loadLog(){if(!log)return;fetch("/api/activity",{headers:{Accept:"application/json"}}).then(function(r){return r.ok?r.json():null}).then(function(body){if(body)paintLog(body.events||[])}).catch(function(){})}
+if(log){loadLog();if(!reduce)setInterval(loadLog,15000)}
+
+/* probe */
+$$("[data-probe]").forEach(function(b){b.addEventListener("click",function(){var box=$(b.getAttribute("data-probe")),form=b.closest("form");if(!box||!form)return;
+  if(window.pgSync)window.pgSync(form);b.classList.add("is-busy");box.className="result";box.textContent="Testing…";
+  fetch("/monitors/probe",{method:"POST",body:new FormData(form),headers:{Accept:"application/json"}}).then(function(r){return r.json().then(function(j){return {ok:r.ok,body:j}})}).then(function(res){
+    b.classList.remove("is-busy");
+    if(!res.ok||res.body.error){box.className="result on down";box.textContent=res.body.error||"Check failed";return}
+    box.className="result on "+(res.body.ok?"up":"down");box.textContent=(res.body.latency_ms==null?"":res.body.latency_ms+" ms")+(res.body.message?" · "+res.body.message:"")}).catch(function(){b.classList.remove("is-busy");box.className="result on down";box.textContent="Check failed"})})});
+
+/* wizard */
+var wiz=$("[data-wizard]");
+if(wiz){var secs=$$(".sect",wiz.parentNode),steps=$$(".w",wiz),cur=0;
+  var kind=wiz.getAttribute("data-initial")||"http";
+  function go(n){cur=Math.max(0,Math.min(secs.length-1,n));secs.forEach(function(s,i){s.classList.toggle("on",i===cur)});steps.forEach(function(s,i){s.classList.toggle("on",i===cur);s.classList.toggle("done",i<cur)});
+    if(cur===secs.length-1)review()}
+  $$("[data-next]").forEach(function(b){b.addEventListener("click",function(){
+    if(cur===1){var t=$("#f-target"),n=$("#f-name"),bad=false;[n,t].forEach(function(i){var f=i.closest(".field"),v=i.value.trim();var ok=i===n?/^[A-Za-z0-9_-]{1,128}$/.test(v):(/^(tcp|dns|tls)$/.test(kind)?/^[A-Za-z0-9.-]+$/.test(v):/^https?:\/\//.test(v));if(kind==="heartbeat")ok=i===n?ok:true;f.classList.toggle("bad",!ok);if(!ok)bad=true});if(bad)return}
+    go(cur+1)})});
+  $$("[data-prev]").forEach(function(b){b.addEventListener("click",function(){go(cur-1)})});
+  function applyKind(name){kind=name;var hid=$("#f-kind");if(hid)hid.value=name;$$(".kind").forEach(function(x){x.setAttribute("aria-pressed",x.getAttribute("data-kind")===name)});
+  $$("[data-only]").forEach(function(f){f.hidden=f.getAttribute("data-only").split(" ").indexOf(kind)<0});
+  var t=$("#f-target");if(t){t.placeholder=/^(tcp|dns|tls)$/.test(kind)?"example.com":"https://example.com"}}
+$$(".kind").forEach(function(k){k.addEventListener("click",function(){applyKind(k.getAttribute("data-kind"))})});applyKind(kind);
+  function review(){var set=function(id,v){var n=document.getElementById(id);if(n)n.textContent=v};var iv=$("#f-int"),rv=$("[name=retries]");set("r-kind",kind);set("r-name",($("#f-name")||{}).value||"-");set("r-target",($("#f-target")||{}).value||"-");set("r-int",(iv?iv.value:"60")+" s");set("r-ret",(rv?rv.value:"3")+" attempts")}
+  $$(".stepper").forEach(function(s){var o=$("input",s)||$("output",s),b=$$("button",s),mn=+s.getAttribute("data-min"),mx=+s.getAttribute("data-max"),st=+s.getAttribute("data-step")||1;
+    function read(){return +(o.value!=null&&o.tagName==="INPUT"?o.value:o.textContent)||0}
+    function write(v){if(o.tagName==="INPUT")o.value=String(v);else o.textContent=String(v)}
+    b[0].addEventListener("click",function(){write(Math.max(mn,read()-st))});b[1].addEventListener("click",function(){write(Math.min(mx,read()+st))})});
+  window.pgSync=function(){};
+  window.pgInt=function(){var n=$("#f-int");return n?n.value:"60"};
+  go(0)}
+
+/* chart */
+var ch=$("[data-chart]");
+if(ch){var tip=$(".tip",ch.parentNode),raw=[],node=document.getElementById("chart-data");
+  try{raw=node?JSON.parse(node.textContent):[]}catch(e){raw=[]}
+  var W=1000,H=280,P={l:46,r:12,t:16,b:26},cur2="24h";
+  function hours(k){return k==="1h"?1:k==="7d"?24*7:k==="30d"?24*30:24}
+  function series(){var cut=Date.now()-hours(cur2)*3600000;var rows=raw.filter(function(row){var t=new Date(row[0]).getTime();return !isNaN(t)&&t>=cut});return rows.length?rows:raw.slice(-Math.min(raw.length,96))}
+  function draw(){var rows=series(),vals=rows.map(function(row){return row[1]==null?null:Number(row[1])}),nums=vals.filter(function(v){return v!=null&&!isNaN(v)});
+    ch.textContent="";if(!nums.length){var empty=el("text",{x:W/2,y:H/2,"text-anchor":"middle"});empty.textContent="no data";ch.appendChild(empty);var sp=document.getElementById("c-p50");if(sp){sp.textContent="—";var sq=document.getElementById("c-p95");if(sq)sq.textContent="—"}return}
+    var n=vals.length,mx=Math.max(1,Math.ceil(Math.max.apply(0,nums)/50)*50);
+    var X=function(i){return P.l+(n<2?0:i*(W-P.l-P.r)/(n-1))},Y=function(v){return H-P.b-(v/mx)*(H-P.t-P.b)};
+    var g=el("g",{"class":"grid"});for(var j=0;j<=4;j++){var y=Y(mx*j/4);g.appendChild(el("line",{x1:P.l,x2:W-P.r,y1:y,y2:y}));var tx=el("text",{x:P.l-8,y:y+4,"text-anchor":"end"});tx.textContent=Math.round(mx*j/4);g.appendChild(tx)}ch.appendChild(g);
+    var path="",open=false;vals.forEach(function(v,i){if(v==null||isNaN(v)){open=false;return}path+=(open?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1)+" ";open=true});
+    vals.forEach(function(v,i){if(v==null){var x0=X(i),x1=X(Math.min(n-1,i+1));ch.appendChild(el("rect",{x:x0,y:P.t,width:Math.max(2,x1-x0),height:H-P.t-P.b,fill:"var(--line)",opacity:".7"}))}});
+    var sorted=nums.slice().sort(function(a,b){return a-b}),p50=sorted[Math.floor((sorted.length-1)*.5)],p95=sorted[Math.min(sorted.length-1,Math.floor((sorted.length-1)*.95))];
+    ch.appendChild(el("line",{"class":"p50",x1:P.l,x2:W-P.r,y1:Y(p50),y2:Y(p50)}));ch.appendChild(el("line",{"class":"p95",x1:P.l,x2:W-P.r,y1:Y(p95),y2:Y(p95)}));
+    if(path){var ln=el("path",{"class":"line",d:path});ch.appendChild(ln)}
+    var s50=document.getElementById("c-p50");if(s50){s50.textContent=Math.round(p50)+" ms";var s95=document.getElementById("c-p95");if(s95)s95.textContent=Math.round(p95)+" ms"}}
+  $$("[data-range]").forEach(function(b){b.addEventListener("click",function(){$$("[data-range]").forEach(function(x){x.setAttribute("aria-selected",x===b)});cur2=b.getAttribute("data-range");draw()})});
+  draw()}
+
+/* SLA */
+var sla=$("[data-sla]");
+if(sla){var a=$("#s-t"),dn=$("#s-d"),pr=$("#s-p");
+  function calc(){var tgt=parseFloat(a.value),days={"30 days":30,"90 days":90,"365 days":365}[pr.value]||30,mins=days*1440,allowed=mins*(1-tgt/100),down=parseFloat(dn.value)||0,ach=100*(1-down/mins);
+    var ok=ach>=tgt,C=2*Math.PI*84,frac=Math.max(0,Math.min(1,(ach-90)/10));
+    $("#s-allow").textContent=allowed.toFixed(1)+" min";$("#s-ach").textContent=ach.toFixed(3)+"%";$("#s-left").textContent=Math.max(0,allowed-down).toFixed(1)+" min";
+    var g=$(".gauge .val"),box=$(".gauge");g.setAttribute("stroke-dasharray",C);g.setAttribute("stroke-dashoffset",C*(1-frac));box.style.setProperty("--c",ok?"var(--ok)":"var(--danger)");$("#s-g").textContent=ach.toFixed(2)+"%";
+    var v=$("#s-v");v.className="pill "+(ok?"up":"down");v.textContent=ok?"Target met":"Target missed"}
+  [a,dn,pr].forEach(function(i){i.addEventListener("input",calc)});$$("[data-t]").forEach(function(b){b.addEventListener("click",function(){a.value=b.getAttribute("data-t");$$("[data-t]").forEach(function(x){x.setAttribute("aria-pressed",x===b)});calc()})});calc()}
+
+/* api key reveal / generate token */
+$$("[data-gen]").forEach(function(b){b.addEventListener("click",function(){var form=b.closest("form");if(form)form.requestSubmit?form.requestSubmit():form.submit()})});
+
+/* drop zone */
+$$(".drop").forEach(function(d){["dragover","dragenter"].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.add("over")})});["dragleave","drop"].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.remove("over");if(ev==="drop"&&e.dataTransfer&&e.dataTransfer.files.length){var input=$("input[type=file]",d);if(input)input.files=e.dataTransfer.files;var name=e.dataTransfer.files[0].name;var label=$("b",d);if(label)label.textContent=name}})})});
+
+/* local times, meter widths, and live KPI numbers */
+function paintTimes(){$$("time[datetime]").forEach(function(node){var when=new Date(node.getAttribute("datetime")||"");if(isNaN(when.getTime()))return;var text=when.toLocaleString(undefined,{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});if(node.textContent!==text)node.textContent=text})}
+function paintMeters(){$$(".meter i").forEach(function(n){var w=n.getAttribute("data-w");if(w)n.style.width=w})}
+function paintKpis(body){if(!body)return;var total=(body.counts.up||0)+(body.counts.down||0)+(body.counts.unknown||0)+(body.counts.paused||0);
+  var map={monitors:total,uptime:body.uptime,incidents:body.open_incidents,checks:body.checks_today,latency:body.avg_ms,cert:body.next_cert};
+  Object.keys(map).forEach(function(name){var n=document.querySelector('[data-kpi="'+name+'"]');if(!n||map[name]==null||map[name]==="")return;n.textContent=map[name]});
+  (body.monitors||[]).forEach(function(card){$$(".mon").forEach(function(el){var name=el.querySelector(".mon-name");if(!name||name.textContent!==card.name)return;var msg=el.querySelector(".mon-msg");if(msg&&card.plain)msg.textContent=card.plain})})}
+paintTimes();paintMeters();
+if($("[data-kpis]")){setInterval(function(){fetch("/api/dashboard",{headers:{Accept:"application/json"}}).then(function(r){return r.ok?r.json():null}).then(function(body){paintKpis(body);if(body&&body.activity)paintLog(body.activity)}).catch(function(){})},5000)}
+var kindFilter=$("[data-kind-filter]");
+if(kindFilter){kindFilter.addEventListener("change",function(){var v=kindFilter.value;$$("#mons [data-kind]").forEach(function(el){el.hidden=v!=="all"&&el.getAttribute("data-kind")!==v})})}
 })();

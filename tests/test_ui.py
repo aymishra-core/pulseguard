@@ -953,14 +953,14 @@ def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
     def ring() -> tuple[str, str]:
         html = client.get("/dashboard").get_data(as_text=True)
         match = re.search(
-            r'class="ring ([a-z]+)" id="hero-ring"[\s\S]*?href="(#[^"]+)"',
+            r'data-ring="([a-z]+)"[\s\S]*?id="hero-ring"[\s\S]*?href="(#[^"]+)"',
             html,
         )
         assert match is not None
         return match.group(1), match.group(2)
 
     store(CheckResult("web", "http", True, 12, "HTTP 200", Severity.OK, moment))
-    assert ring() == ("up", "#i-check")
+    assert ring() == ("up", "#check")
     store(
         CheckResult(
             "web",
@@ -972,13 +972,13 @@ def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
             moment + timedelta(minutes=1),
         )
     )
-    assert ring() == ("warn", "#i-alert")
+    assert ring() == ("warn", "#alert")
     store(
         CheckResult(
             "web", "http", True, 0, "monitoring gap", Severity.INFO, moment + timedelta(minutes=2)
         )
     )
-    assert ring() == ("warn", "#i-alert")
+    assert ring() == ("warn", "#alert")
     store(
         CheckResult(
             "web",
@@ -990,16 +990,16 @@ def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
             moment + timedelta(minutes=3),
         )
     )
-    assert ring() == ("down", "#i-x")
+    assert ring() == ("down", "#x")
     store(
         CheckResult(
             "web", "http", True, 11, "HTTP 200", Severity.OK, moment + timedelta(minutes=4)
         ),
         incident=True,
     )
-    assert ring() == ("down", "#i-x")
+    assert ring() == ("down", "#x")
     store(enabled=False)
-    assert ring() == ("paused", "#i-pause")
+    assert ring() == ("paused", "#pause")
 
 
 def test_sidebar_shows_the_installed_version(tmp_path: Path) -> None:
@@ -1010,7 +1010,7 @@ def test_sidebar_shows_the_installed_version(tmp_path: Path) -> None:
     page = client.get("/dashboard")
     assert __version__.encode() in page.data
     assert b"1.8.4" not in page.data
-    assert b"SELF-HOSTED" in page.data
+    assert b"Uptime console" in page.data
 
 
 def _login(tmp_path: Path):

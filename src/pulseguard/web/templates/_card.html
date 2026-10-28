@@ -1,0 +1,34 @@
+<article class="mon" data-st="{{ card.tone }}" data-kind="{{ card.kind }}">
+<div class="mon-head">
+<span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#{{ card.icon }}"/></svg></span>
+<div class="mon-id">
+<a class="mon-name" href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a>
+<span class="mon-target" title="{{ card.target }}">{{ card.target }}</span>
+</div>
+{% set pill = 'warn' if card.tone == 'warn' else card.state %}
+<span class="pill {{ pill }}">{% if card.state == 'up' and card.tone == 'warn' %}Expiring{% elif card.state == 'up' %}Up{% elif card.state == 'down' %}Down{% elif card.state == 'paused' %}Paused{% else %}Unknown{% endif %}</span>
+</div>
+<div class="mon-msg">{{ card.plain }}</div>
+<div class="mon-meta">
+<span>Checked <time datetime="{{ card.checked_at }}">{{ card.checked }}</time></span>
+<span class="next" title="Next check"><span class="cd" data-cd="{{ card.left }}" data-total="{{ card.interval }}"><span></span></span></span>
+</div>
+{% if card.points|length > 1 %}
+<div class="spark" data-spark="{{ card.points|join(',') }}" style="height:34px"></div>
+{% endif %}
+<div>
+<div class="mon-up"><span>Last 24 h</span><b>{{ card.uptime }}</b></div>
+<div class="bar" data-bar="{{ card.bar }}" style="margin-top:8px"></div>
+</div>
+<div class="mon-foot">
+<form method="post" action="{{ url_for('monitor_check', name=card.name) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button class="btn btn-sm" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#refresh"/></svg>Check now</button>
+</form>
+<form method="post" action="{{ url_for('monitor_pause', name=card.name) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button class="btn btn-sm btn-ghost" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#{% if card.state == 'paused' %}play{% else %}pause{% endif %}"/></svg>{% if card.state == 'paused' %}Resume{% else %}Pause{% endif %}</button>
+</form>
+<a class="btn btn-sm btn-ghost" href="{{ url_for('monitor_detail', name=card.name) }}" style="margin-left:auto">Open <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>
+</div>
+</article>

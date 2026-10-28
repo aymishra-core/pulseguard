@@ -1,54 +1,64 @@
 <!DOCTYPE html>
-<html lang="en" data-dot="{{ dot }}" data-headline="{{ headline }}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PulseGuard status</title>
-    <link rel="icon" href="{{ url_for('static', filename='favicon-' + dot + '.svg') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
-  </head>
-  <body>
-    <main class="public">
-      <header class="top">
-        <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> {{ headline }}</p>
-        <div class="spacer"></div>
-        <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Theme"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-        {% if serve %}
-        <a href="{{ url_for('console_login') }}">Sign in</a>
-        {% else %}
-        <a href="{{ url_for('login_form') }}">Admin</a>
-        {% endif %}
-      </header>
-      <p class="note">This page reads stored results. It does not contact the monitored targets.</p>
-      {% if updated %}<p>Last updated <time class="ago" datetime="{{ updated }}">{{ clock(updated) }}</time></p>{% endif %}
-      {% if not rows %}
-      <p class="empty">No monitors yet.</p>
-      {% else %}
-      {% for row in rows %}
-      <article class="panel">
-        <h2>{{ row.name }} <span class="pill {{ 'unknown' if row.ok is none else ('up' if row.ok else 'down') }}">{% if row.ok is none %}unknown{% elif row.ok %}up{% else %}down{% endif %}</span></h2>
-        <p class="kind">{{ row.kind }}</p>
-        <p>{{ row.message }}</p>
-        <div class="uptime-bar" aria-label="90 day uptime for {{ row.name }}">
-          {% for label in bars[row.name] %}
-          <span class="seg {% if label == 'empty' %}miss{% else %}{{ label }}{% endif %}" data-tooltip="{% if label == 'gap' or label == 'empty' %}no data{% else %}{{ label }}{% endif %}"></span>
-          {% endfor %}
-        </div>
-        {% if row.checked_at %}<p>Checked <time class="ago" datetime="{{ row.checked_at }}">{{ clock(row.checked_at) }}</time></p>{% endif %}
-      </article>
-      {% endfor %}
-      {% endif %}
-      <h2>Recent incidents</h2>
-      {% if not history %}
-      <p class="empty">No recent incidents.</p>
-      {% else %}
-      <ul class="timeline">
-        {% for item in history %}
-        <li>{{ item.title }} · <time class="when" datetime="{{ item.started }}">{{ clock(item.started) }}</time>{% if item.ended %} to <time class="when" datetime="{{ item.ended }}">{{ clock(item.ended) }}</time>{% endif %}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-    </main>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PulseGuard status</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon-' ~ dot ~ '.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+{% include "_sprite.html" %}
+<div class="pub">
+<div class="pub-head">
+<span class="brand-mark"><svg class="i i-lg" aria-hidden="true"><use href="#pulse"/></svg></span>
+<b>PulseGuard status</b>
+<span style="flex:1"></span>
+{% if serve %}<a class="btn btn-sm" href="{{ url_for('console_login') }}">Sign in</a>{% endif %}
+<button class="icon-btn" id="theme-toggle" data-theme-toggle type="button" aria-label="Toggle theme"><svg class="i" aria-hidden="true"><use href="#sun"/></svg></button>
+</div>
+<section class="card hero {{ 'hero--danger' if dot == 'down' else ('hero--ok' if dot == 'up' else '') }} hud">
+<div class="ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="#{% if dot == 'down' %}x{% elif dot == 'up' %}check{% else %}alert{% endif %}"/></svg></div></div>
+<div class="hero-main">
+<div class="hero-eye">Status</div>
+<h2>{{ headline }}</h2>
+<p>{% if updated %}Updated <time datetime="{{ updated }}">{{ clock(updated) }}</time>.{% else %}Updated just now.{% endif %}</p>
+</div>
+</section>
+<section class="card">
+{% for row in rows %}
+{% set ns = namespace(bar='', up=0, down=0) %}
+{% for part in bars.get(row.name, []) %}
+{% if part == 'up' %}{% set ns.bar = ns.bar ~ 'o' %}{% set ns.up = ns.up + 1 %}
+{% elif part == 'down' %}{% set ns.bar = ns.bar ~ 'x' %}{% set ns.down = ns.down + 1 %}
+{% else %}{% set ns.bar = ns.bar ~ 'g' %}{% endif %}
+{% endfor %}
+<div class="pub-row">
+<div class="nm">{{ row.name }}<div class="hint">{{ 'No data' if row.message == 'monitoring gap' else row.message }}</div></div>
+<div class="pub-bar">
+<div class="bar" data-bar="{{ ns.bar }}"></div>
+<small><span>90 days ago</span><span>{% if ns.up + ns.down %}{{ ((ns.up * 100) / (ns.up + ns.down))|round(2) }}% uptime{% else %}no data{% endif %}</span><span>Today</span></small>
+</div>
+<span class="pill {{ 'up' if row.ok else ('down' if row.ok is sameas false else 'unknown') }}">{% if row.ok %}Operational{% elif row.ok is sameas false %}Degraded{% else %}No data{% endif %}</span>
+</div>
+{% else %}
+<div class="empty"><b>No monitors yet</b></div>
+{% endfor %}
+</section>
+<section class="card card-pad">
+<h3>Recent incidents</h3>
+{% if history %}
+<ul class="feed">
+{% for item in history %}
+<li><span class="dot still"></span><div><b>{{ item.title }}</b></div><time datetime="{{ item.started }}">{{ clock(item.started) }}</time></li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No recent incidents</p>
+{% endif %}
+</section>
+<p class="hint">Powered by PulseGuard</p>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
 </html>

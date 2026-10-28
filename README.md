@@ -26,7 +26,7 @@ On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**.
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.3.0 is the telemetry console: a grid background, teal accent, HUD corners, and a status ring that follows an open incident, a gap, a pause, or a clean bill of health. The sidebar shows the installed version. The type is a system sans and a system monospace. Light and dark follow the system until you toggle them, and a quiet period longer than three intervals is shown as no data instead of a false outage. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.3.0 is the finished console from the design pack: the same sidebar, top bar, incident banner, and page structure, filled with stored monitors and incidents. The type is the pack's system stack. Light and dark follow the system until you toggle them, and the choice is kept as `pg-theme`. A quiet period is a grey "no data" slice, not downtime. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 

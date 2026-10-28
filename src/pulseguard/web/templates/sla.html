@@ -1,50 +1,50 @@
 {% extends "base.html" %}
-{% block title %}SLA · PulseGuard{% endblock %}
-{% block crumb %}SLA{% endblock %}
-{% block body %}
-<h1>SLA calculator</h1>
-<p class="help">The target is a number you choose, between 0 and 1. It is not a measurement from this program.</p>
-{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-{% if result %}
-<p class="result" role="status">{{ result }}</p>
-<meter id="sla-gauge" min="0" max="100" value="0" aria-label="achieved percent"></meter>
-{% endif %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <input type="hidden" name="source" value="typed" />
-  <label for="successes">Successes</label>
-  <input id="successes" name="successes" value="{{ successes }}" />
-  <label for="total">Total</label>
-  <input id="total" name="total" value="{{ total }}" />
-  <label for="target">Target</label>
-  <input id="target" name="target" value="{{ target }}" />
-  <p class="segmented">
-    <button type="button" data-fill-target="0.99">99%</button>
-    <button type="button" data-fill-target="0.999">99.9%</button>
-    <button type="button" data-fill-target="0.9999">99.99%</button>
-  </p>
-  <p><button type="submit">Calculate</button></p>
+{% block title %}SLA reports{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>SLA reports</span>{% endblock %}
+{% block page %}
+<div class="head"><div><div class="eyebrow">Monitor</div><h1 class="title">SLA reports</h1><p class="sub">How much downtime a target allows, and where you stand.</p></div></div>
+{% if error %}<div class="banner" role="alert">{{ error }}</div>{% endif %}
+<section class="card card-pad" data-sla>
+<div class="sla-out">
+<div class="gauge" style="--c:var(--ok)"><svg viewBox="0 0 200 200" width="180" height="180" aria-hidden="true"><circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="14"/><circle class="val" cx="100" cy="100" r="84" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round"/></svg><div><b id="s-g">—</b></div></div>
+<div>
+<div class="chips">
+<button class="btn btn-sm" type="button" data-t="99" aria-pressed="true">99%</button>
+<button class="btn btn-sm" type="button" data-t="99.9">99.9%</button>
+<button class="btn btn-sm" type="button" data-t="99.95">99.95%</button>
+<button class="btn btn-sm" type="button" data-t="99.99">99.99%</button>
+</div>
+<div class="grid3">
+<div class="field"><label for="s-t">Target (%)</label><input id="s-t" type="number" value="99" step="0.01"></div>
+<div class="field"><label for="s-d">Downtime so far (min)</label><input id="s-d" type="number" value="0"></div>
+<div class="field"><label for="s-p">Period</label><select id="s-p"><option>30 days</option><option>90 days</option><option>365 days</option></select></div>
+</div>
+<dl class="kv"><dt>Allowed downtime</dt><dd id="s-allow">-</dd><dt>Achieved</dt><dd id="s-ach">-</dd><dt>Budget left</dt><dd id="s-left">-</dd><dt>Verdict</dt><dd><span class="pill" id="s-v">-</span></dd></dl>
+</div>
+</div>
+</section>
+<section class="card card-pad">
+<h3>From your numbers</h3>
+{% if result %}<p role="status">{{ result }}</p>{% endif %}
+<form method="post" action="{{ url_for('sla') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="source" value="typed">
+<div class="grid3">
+<div class="field"><label for="successes">Successes</label><input id="successes" name="successes" type="number" value="{{ successes }}"></div>
+<div class="field"><label for="total">Total</label><input id="total" name="total" type="number" value="{{ total }}"></div>
+<div class="field"><label for="target">Target</label><input id="target" name="target" type="text" value="{{ target }}"><span class="hint">A fraction, such as 0.99.</span></div>
+</div>
+<button class="btn btn-primary" type="submit">Calculate</button>
 </form>
-<h2>From my data</h2>
-{% if not names %}
-<p class="empty">Add a monitor before using stored results.</p>
-{% else %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <input type="hidden" name="source" value="data" />
-  <label for="monitor">Monitor</label>
-  <select id="monitor" name="monitor">
-    {% for name in names %}<option>{{ name }}</option>{% endfor %}
-  </select>
-  <label for="hours">Period</label>
-  <select id="hours" name="hours">
-    <option value="24">24 hours</option>
-    <option value="168">7 days</option>
-    <option value="720">30 days</option>
-  </select>
-  <label for="data-target">Target</label>
-  <input id="data-target" name="target" value="0.99" />
-  <p><button type="submit" class="btn-secondary">Use stored results</button></p>
+<form method="post" action="{{ url_for('sla') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="source" value="data">
+<div class="grid3">
+<div class="field"><label for="monitor">Monitor</label><select id="monitor" name="monitor">{% for name in names %}<option>{{ name }}</option>{% endfor %}</select></div>
+<div class="field"><label for="hours">Hours</label><input id="hours" name="hours" type="number" value="24"></div>
+<div class="field"><label for="data-target">Target</label><input id="data-target" name="target" type="text" value="0.99"></div>
+</div>
+<button class="btn" type="submit">Use stored checks</button>
 </form>
-{% endif %}
+</section>
 {% endblock %}

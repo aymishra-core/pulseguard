@@ -1,56 +1,54 @@
 {% extends "base.html" %}
-{% block title %}Alerts · PulseGuard{% endblock %}
-{% block crumb %}Alerts{% endblock %}
-{% block body %}
-<h1>Alerts</h1>
-{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <label for="failures_before_open">Failures before an incident opens</label>
-  <input id="failures_before_open" name="failures_before_open" type="number" min="1" max="20" step="1" value="{{ settings.failures_before_open }}" />
-  <p class="help">1–20. The default is 3.</p>
-  <label for="successes_before_resolve">Successes before it resolves</label>
-  <input id="successes_before_resolve" name="successes_before_resolve" type="number" min="1" max="20" step="1" value="{{ settings.successes_before_resolve }}" />
-  <p class="help">1–20. The default is 1.</p>
-  <label for="smtp_host">SMTP host</label>
-  <input id="smtp_host" name="smtp_host" value="{{ settings.smtp_host }}" />
-  <p class="help">The password is stored in the database file. An environment variable overrides it and is not shown here.</p>
-  <label for="smtp_port">SMTP port</label>
-  <input id="smtp_port" name="smtp_port" value="{{ settings.smtp_port }}" />
-  <label for="smtp_user">SMTP user</label>
-  <input id="smtp_user" name="smtp_user" value="{{ settings.smtp_user }}" />
-  <label for="smtp_password">SMTP password</label>
-  <input id="smtp_password" name="smtp_password" type="password" value="" autocomplete="new-password" />
-  <p class="help">{% if settings.password_set %}A password is saved. Leave this blank to keep it.{% else %}No password is saved.{% endif %}</p>
-  <label for="smtp_from">From</label>
-  <input id="smtp_from" name="smtp_from" value="{{ settings.smtp_from }}" />
-  <label for="smtp_to">To</label>
-  <input id="smtp_to" name="smtp_to" value="{{ settings.smtp_to }}" />
-  <label><input type="checkbox" name="smtp_starttls" value="1" {% if settings.smtp_starttls %}checked{% endif %} /> STARTTLS</label>
-  <p><button type="submit">Save</button></p>
-</form>
-<form method="post" action="{{ url_for('alert_test') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-secondary">Send test email</button>
-</form>
-<h2>Alert log</h2>
-{% if not log %}
-<p class="empty">No alerts yet. An alert is recorded even when mail is not configured.</p>
+{% block title %}Alerts{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Alerts</span>{% endblock %}
+{% block page %}
+<div class="head">
+<div><div class="eyebrow">Monitor</div><h1 class="title">Alerts</h1><p class="sub">Who gets told, and the history of what was sent.</p></div>
+</div>
+{% if error %}<div class="banner" role="alert">{{ error }}</div>{% endif %}
+<section class="card">
+<div class="card-head"><h3>Delivery history</h3></div>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Time</th><th>Event</th><th>Monitor</th><th>Channel</th><th>Result</th></tr></thead>
+<tbody>
+{% for item in log %}
+<tr>
+<td><time datetime="{{ stamp(item.created_at) }}">{{ clock(item.created_at) }}</time></td>
+<td>{{ item.kind }}</td>
+<td>{{ item.monitor }}</td>
+<td>{{ item.recipient }}</td>
+<td>{{ item.status }}{% if item.error_text %} · {{ item.error_text }}{% endif %}</td>
+</tr>
 {% else %}
-<table data-more>
-  <thead><tr><th>Time</th><th>Monitor</th><th>Kind</th><th>Recipient</th><th>Status</th><th>Error</th></tr></thead>
-  <tbody>
-    {% for row in log %}
-    <tr>
-      <td><time class="when" datetime="{{ stamp(row.created_at) }}">{{ clock(row.created_at) }}</time></td>
-      <td>{{ row.monitor }}</td>
-      <td>{{ row.kind }}</td>
-      <td>{{ row.recipient }}</td>
-      <td><span class="pill {% if row.status == 'sent' %}up{% elif row.status == 'failed' %}down{% else %}unknown{% endif %}">{{ row.status }}</span></td>
-      <td>{{ row.error_text }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
+<tr><td colspan="5">No alerts sent yet.</td></tr>
+{% endfor %}
+</tbody>
 </table>
-{% endif %}
+</div>
+</section>
+<section class="card card-pad">
+<h3>Email channel</h3>
+{% if settings.password_set %}<p>The password is saved. Leave the field blank to keep it.</p>{% endif %}
+<form method="post" action="{{ url_for('alerts') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="grid2">
+<div class="field"><label for="smtp_to">Send alerts to</label><input id="smtp_to" name="smtp_to" type="text" value="{{ settings.smtp_to }}" autocomplete="off"></div>
+<div class="field"><label for="smtp_from">From</label><input id="smtp_from" name="smtp_from" type="text" value="{{ settings.smtp_from }}" autocomplete="off"></div>
+<div class="field"><label for="smtp_host">SMTP host</label><input id="smtp_host" name="smtp_host" type="text" value="{{ settings.smtp_host }}" autocomplete="off"></div>
+<div class="field"><label for="smtp_port">Port</label><input id="smtp_port" name="smtp_port" type="text" value="{{ settings.smtp_port }}"></div>
+<div class="field"><label for="smtp_user">Username</label><input id="smtp_user" name="smtp_user" type="text" value="{{ settings.smtp_user }}" autocomplete="off"></div>
+<div class="field"><label for="smtp_password">Password</label><input id="smtp_password" name="smtp_password" type="password" value="" autocomplete="new-password"></div>
+<div class="field"><label for="failures_before_open">Failures to open</label><input id="failures_before_open" name="failures_before_open" type="number" value="{{ settings.failures_before_open }}"></div>
+<div class="field"><label for="successes_before_resolve">Successes to resolve</label><input id="successes_before_resolve" name="successes_before_resolve" type="number" value="{{ settings.successes_before_resolve }}"></div>
+</div>
+<div class="switch-row">
+<button class="switch" type="button" role="switch" aria-checked="{{ 'true' if settings.smtp_starttls else 'false' }}" aria-controls="smtp-starttls" data-label="STARTTLS" aria-label="STARTTLS"></button>
+<input id="smtp-starttls" name="smtp_starttls" type="checkbox" value="1" {% if settings.smtp_starttls %}checked{% endif %} hidden>
+<div><b>Also email on recovery</b><div class="hint">STARTTLS. A blank password keeps the saved one.</div></div>
+</div>
+<div class="row-act"><button class="btn btn-primary" type="submit">Save</button></div>
+</form>
+<form method="post" action="{{ url_for('alert_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Send test alert</button></form>
+</section>
 {% endblock %}

@@ -1,89 +1,103 @@
 <!DOCTYPE html>
-<html lang="en" data-dot="{{ dot }}" data-headline="{{ headline }}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}PulseGuard{% endblock %}</title>
-    <link rel="icon" href="{{ url_for('static', filename='favicon-' + dot + '.svg') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
-  </head>
-  <body>
-    <svg class="sprite" xmlns="http://www.w3.org/2000/svg" hidden>
-      <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3zM12 9v5M12 17h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16zM10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M5 16a7 7 0 1 1 14 0M12 16l4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M8 3v6M16 3v6M6 9h12v3a6 6 0 0 1-12 0V9zM12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.7.3-1.2.9-1.2 1.6V14M12 17h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c2.5 2.8 2.5 15.2 0 18M12 3c-2.5 2.8-2.5 15.2 0 18" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-      <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14M12 6v12M8 18h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3zM12 8v5M12 16h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M4 12h3l2-4 3 8 2-4h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-      <symbol id="i-panel" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 5v14" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-    </svg>
-    <div class="shell" id="shell">
-      <nav class="nav" aria-label="Sections">
-        <a class="brand" href="{{ url_for('dashboard') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="brand-text"><span class="brand-name">PulseGuard</span><span class="brand-meta">SELF-HOSTED · {{ version }}</span></span></a>
-        <p class="nav-label">Monitor</p>
-        <a href="{{ url_for('dashboard') }}"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg><span class="label">Dashboard</span></a>
-        <a href="{{ url_for('monitor_list') }}"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span class="label">Monitors</span></a>
-        <a href="{{ url_for('incident_list') }}"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span class="label">Incidents</span>{% if nav_incidents %}<span class="badge">{{ nav_incidents }}</span>{% endif %}</a>
-        <a href="{{ url_for('certificates') }}"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><span class="label">Certificates</span>{% if nav_certs %}<span class="badge">{{ nav_certs }}</span>{% endif %}</a>
-        <a href="{{ url_for('alerts') }}"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span class="label">Alerts</span></a>
-        <a href="{{ url_for('sla') }}"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><span class="label">SLA</span></a>
-        <p class="nav-label">System</p>
-        <a href="{{ url_for('agents') }}"><svg class="icon" aria-hidden="true"><use href="#i-plug"/></svg><span class="label">Agents</span></a>
-        <a href="{{ url_for('data_page') }}"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg><span class="label">Data</span></a>
-        <a href="{{ url_for('settings') }}"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg><span class="label">Settings</span></a>
-        <a href="{{ url_for('help_page') }}"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="label">Help</span></a>
-        <div class="nav-tools">
-          <a href="{{ url_for('public_status') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="label">View status page</span></a>
-          <button type="button" class="icon-btn" id="nav-collapse" aria-pressed="false" aria-label="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg><span class="label">Collapse sidebar</span></button>
-        </div>
-      </nav>
-      <div class="main">
-        <header class="top">
-          <p class="crumb"><a href="{{ url_for('dashboard') }}">PulseGuard</a> <span aria-hidden="true">/</span> {% block crumb %}{% endblock %}</p>
-          <div class="spacer"></div>
-          <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> <span id="headline">{{ headline }}</span></p>
-          <button type="button" class="btn-secondary" id="palette-open">Jump to… <kbd>Ctrl</kbd><kbd>K</kbd></button>
-          <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Theme"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg></button>
-          <details class="user-menu">
-            <summary>{{ user }}</summary>
-            <form method="post" action="{{ url_for('console_logout') }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <button type="submit" class="btn-secondary">Log out</button>
-            </form>
-          </details>
-        </header>
-        {% if nav_incidents %}
-        <p class="banner" role="status"><span>{% if nav_incidents == 1 %}1 incident is affecting monitored services{% else %}{{ nav_incidents }} incidents are affecting monitored services{% endif %}</span> <a href="{{ url_for('incident_list') }}">Review incident</a></p>
-        {% endif %}
-        {% if flash %}
-        <p class="toast {{ flash_level }}" role="status">{{ flash }}</p>
-        {% endif %}
-        <main>
-          {% block body %}{% endblock %}
-        </main>
-      </div>
-    </div>
-    <div class="palette" id="palette" hidden>
-      <div class="palette-panel" role="dialog" aria-modal="true" aria-label="Command palette">
-        <input id="palette-query" type="search" placeholder="Jump to a page or monitor" aria-controls="palette-list" />
-        <ul id="palette-list" role="listbox"></ul>
-        <p class="help"><kbd>↑</kbd> <kbd>↓</kbd> move <kbd>Enter</kbd> open <kbd>Esc</kbd> close</p>
-      </div>
-    </div>
-    <script type="application/json" id="nav-monitors">{{ nav_names|tojson }}</script>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}PulseGuard{% endblock %} · {{ version }}</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon-' ~ dot ~ '.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+{% include "_sprite.html" %}
+<div class="app">
+<aside class="side">
+<div class="brand">
+<span class="brand-mark"><svg class="i i-lg" aria-hidden="true"><use href="#pulse"/></svg></span>
+<div><b>PulseGuard</b><small>Uptime console</small></div>
+</div>
+<div class="nav-label">Monitor</div>
+<nav class="nav" aria-label="Monitor">
+<a href="{{ url_for('dashboard') }}" {% if nav == 'dashboard' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#grid"/></svg><span>Dashboard</span></a>
+<a href="{{ url_for('monitor_list') }}" {% if nav == 'monitors' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#activity"/></svg><span>Monitors</span></a>
+<a href="{{ url_for('incident_list') }}" {% if nav == 'incidents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#alert"/></svg><span>Incidents</span>{% if nav_incidents %}<span class="badge">{{ nav_incidents }}</span>{% endif %}</a>
+<a href="{{ url_for('certificates') }}" {% if nav == 'certificates' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#shield"/></svg><span>Certificates</span>{% if nav_certs %}<span class="badge warn">{{ nav_certs }}</span>{% endif %}</a>
+<a href="{{ url_for('alerts') }}" {% if nav == 'alerts' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#bell"/></svg><span>Alerts</span></a>
+<a href="{{ url_for('sla') }}" {% if nav == 'sla' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#gauge"/></svg><span>SLA reports</span></a>
+</nav>
+<div class="nav-label">System</div>
+<nav class="nav" aria-label="System">
+<a href="{{ url_for('agents') }}" {% if nav == 'agents' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#server"/></svg><span>Agents</span></a>
+<a href="{{ url_for('data_page') }}" {% if nav == 'data' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#db"/></svg><span>Data</span></a>
+<a href="{{ url_for('settings') }}" {% if nav == 'settings' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#cog"/></svg><span>Settings</span></a>
+<a href="{{ url_for('help_page') }}" {% if nav == 'help' %}aria-current="page"{% endif %}><svg class="i" aria-hidden="true"><use href="#help"/></svg><span>Help</span></a>
+</nav>
+<div class="side-foot">
+<a href="{{ url_for('status_page') }}"><svg class="i" aria-hidden="true"><use href="#globe"/></svg><span>Public status</span></a>
+<button class="collapse-btn" type="button" data-collapse><svg class="i" aria-hidden="true"><use href="#chevs"/></svg><span>Collapse</span></button>
+</div>
+</aside>
+<div class="main">
+<header class="top">
+<button class="icon-btn menu-btn" type="button" data-menu aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#menu"/></svg></button>
+<div class="crumb">{% block crumb %}<span>Dashboard</span>{% endblock %}</div>
+<span class="grow"></span>
+{% if nav_incidents %}
+<span class="chip down"><span class="dot"></span><span class="l">{{ nav_incidents }} incident{% if nav_incidents != 1 %}s{% endif %}</span></span>
+{% elif dot == 'down' %}
+<span class="chip down"><span class="dot"></span><span class="l">{{ headline }}</span></span>
+{% elif dot == 'up' %}
+<span class="chip up"><span class="dot"></span><span class="l">All up</span></span>
+{% else %}
+<span class="chip warn"><span class="dot"></span><span class="l">{{ headline }}</span></span>
+{% endif %}
+<button class="jump" type="button" data-open="pal" aria-label="Search"><svg class="i i-sm" aria-hidden="true"><use href="#search"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button>
+<button class="icon-btn" id="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme"><svg class="i" aria-hidden="true"><use href="#sun"/></svg></button>
+<a class="avatar" href="{{ url_for('settings') }}" aria-label="Account">{{ user[:2]|upper }}</a>
+</header>
+{% if nav_incidents %}
+<div class="banner" role="alert">
+<svg class="i" aria-hidden="true"><use href="#alert"/></svg>
+<span>{{ nav_incidents }} incident{% if nav_incidents != 1 %}s{% endif %} active{% if banner_name %}: {{ banner_name }}{% if banner_plain %}, {{ banner_plain }}{% endif %}{% endif %}</span>
+{% if banner_id %}<a href="{{ url_for('incident_detail', incident_id=banner_id) }}">Open incident <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>{% endif %}
+</div>
+{% endif %}
+<main class="page">
+{% block page %}{% endblock %}
+</main>
+</div>
+</div>
+<div class="ov" id="pal" role="dialog" aria-modal="true" aria-label="Command palette">
+<div class="dlg pal">
+<div class="pal-in"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" placeholder="Jump to a page or monitor" aria-label="Jump to a page or monitor"></div>
+<ul class="pal-list" id="palette-list">
+<li><a href="{{ url_for('dashboard') }}"><svg class="i" aria-hidden="true"><use href="#grid"/></svg>Dashboard</a></li>
+<li><a href="{{ url_for('monitor_list') }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>Monitors</a></li>
+<li><a href="{{ url_for('incident_list') }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>Incidents</a></li>
+<li><a href="{{ url_for('certificates') }}"><svg class="i" aria-hidden="true"><use href="#shield"/></svg>Certificates</a></li>
+<li><a href="{{ url_for('alerts') }}"><svg class="i" aria-hidden="true"><use href="#bell"/></svg>Alerts</a></li>
+<li><a href="{{ url_for('sla') }}"><svg class="i" aria-hidden="true"><use href="#gauge"/></svg>SLA reports</a></li>
+<li><a href="{{ url_for('agents') }}"><svg class="i" aria-hidden="true"><use href="#server"/></svg>Agents</a></li>
+<li><a href="{{ url_for('data_page') }}"><svg class="i" aria-hidden="true"><use href="#db"/></svg>Data</a></li>
+<li><a href="{{ url_for('settings') }}"><svg class="i" aria-hidden="true"><use href="#cog"/></svg>Settings</a></li>
+<li><a href="{{ url_for('help_page') }}"><svg class="i" aria-hidden="true"><use href="#help"/></svg>Help</a></li>
+<li><a href="{{ url_for('status_page') }}"><svg class="i" aria-hidden="true"><use href="#globe"/></svg>Public status</a></li>
+{% for name in nav_names %}
+<li><a href="{{ url_for('monitor_detail', name=name) }}"><svg class="i" aria-hidden="true"><use href="#activity"/></svg>{{ name }}</a></li>
+{% endfor %}
+{% if banner_id %}
+<li><a href="{{ url_for('incident_detail', incident_id=banner_id) }}"><svg class="i" aria-hidden="true"><use href="#alert"/></svg>Open incident</a></li>
+{% endif %}
+<li>
+<form method="post" action="{{ url_for('monitor_run_all') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button type="submit"><svg class="i" aria-hidden="true"><use href="#refresh"/></svg>Check all monitors</button>
+</form>
+</li>
+</ul>
+<div class="pal-foot"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></div>
+</div>
+</div>
+<div class="toasts" aria-live="polite">{% if flash %}<div class="toast {{ flash_level }}" role="status">{{ flash }}</div>{% endif %}</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
 </html>

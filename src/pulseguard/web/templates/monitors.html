@@ -1,27 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Monitors · PulseGuard{% endblock %}
-{% block crumb %}Monitors{% endblock %}
-{% block body %}
-<header class="page-head">
-  <h1>Monitors</h1>
-  <a class="button" href="{{ url_for('monitor_new') }}">Add monitor</a>
-</header>
-{% if not rows %}
-<section class="empty">
-  <h2>No monitors yet</h2>
-  <p>Add one to start checking. PulseGuard only watches addresses you type.</p>
-</section>
-{% else %}
-<div class="cards">
-  {% for row in rows %}
-  <article class="card">
-    <p class="kind">{{ row.kind }}</p>
-    <h2><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></h2>
-    <p><span class="pill {{ row.state }}">{{ row.state }}</span></p>
-    <p class="mono">{{ row.target }}</p>
-    <p class="muted">Every {{ row.interval }}s</p>
-  </article>
-  {% endfor %}
+{% block title %}Monitors{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Monitors</span>{% endblock %}
+{% block page %}
+{% set total = counts.up + counts.down + counts.unknown + counts.paused %}
+{% set attn = counts.down + warns %}
+<div class="head">
+<div><div class="eyebrow">Monitor</div><h1 class="title">Monitors</h1><p class="sub">Every check PulseGuard runs, with its schedule and latest result.</p></div>
+<div class="actions"><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
+<div class="toolbar">
+<div class="tabs" data-tabs="#mons">
+<button aria-selected="true" data-f="all">All {{ total }}</button>
+<button aria-selected="false" data-f="attn">Needs attention {{ attn }}</button>
+<button aria-selected="false" data-f="up">Up {{ counts.up }}</button>
+</div>
+<div class="search"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" data-search="#mons" placeholder="Search name or target…" aria-label="Search"></div>
+<select aria-label="Kind" data-kind-filter><option value="all">All kinds</option>{% for kind in ['http','keyword','defacement','tcp','dns','tls','heartbeat'] %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select>
+</div>
+{% if empty %}
+<section class="card"><div class="empty"><b>No monitors yet</b><p>Add your first monitor to start checking.</p><a class="btn btn-primary" href="{{ url_for('monitor_new') }}">Add monitor</a></div></section>
+{% else %}
+<section class="mons" id="mons">{% for card in cards %}{% include "_card.html" %}{% endfor %}</section>
 {% endif %}
 {% endblock %}

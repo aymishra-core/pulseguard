@@ -1,8 +1,8 @@
 # Design system
 
-PulseGuard draws every screen from the tokens in `src/pulseguard/web/static/status.css`. The 1.3.0 console follows the sci-fi telemetry reference: a grid-lined field, teal accent, HUD corner brackets, and a status ring. The reference tree `design/v0` was not in this repository, so the tokens were taken from the prototype screenshots and written here. No React, Tailwind, or remote font is shipped.
+PulseGuard 1.3.0 draws the console from `src/pulseguard/web/static/app.css`, copied from the design pack. Dark is the default `:root`. Light is `data-theme="light"` and the system preference. The theme choice is stored as `pg-theme`. No React, Tailwind, CDN, or web font is shipped. The type stacks name IBM Plex and fall through to the system sans and monospace.
 
-Type is the system sans stack (`--font`) plus a system monospace stack (`--mono`) for the version line, targets, times, the check stream, and KPI figures. No font file is bundled.
+The table below is the previous console. The live names are `--text`, `--bg`, `--panel`, `--muted`, `--accent`, `--ok`, `--warn`, `--danger`, and `--info` in `app.css`.
 
 ## Colour
 

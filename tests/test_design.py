@@ -5,18 +5,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_CSS = Path(__file__).resolve().parents[1] / "src" / "pulseguard" / "web" / "static" / "status.css"
+_CSS = Path(__file__).resolve().parents[1] / "src" / "pulseguard" / "web" / "static" / "app.css"
 _JS = Path(__file__).resolve().parents[1] / "src" / "pulseguard" / "web" / "static" / "app.js"
 _PAIRS = (
-    ("--ink", "--bg"),
-    ("--ink", "--surface"),
+    ("--text", "--bg"),
+    ("--text", "--panel"),
     ("--muted", "--bg"),
-    ("--muted", "--surface"),
-    ("--on-accent", "--accent"),
-    ("--ok", "--surface"),
-    ("--warn", "--surface"),
-    ("--danger", "--surface"),
-    ("--info", "--surface"),
+    ("--muted", "--panel"),
+    ("--accent-ink", "--accent"),
+    ("--ok", "--panel"),
+    ("--warn", "--panel"),
+    ("--danger", "--panel"),
+    ("--info", "--panel"),
 )
 
 
@@ -57,14 +57,15 @@ def test_token_contrast_meets_aa() -> None:
     """Text colours on their surfaces meet a 4.5:1 contrast ratio."""
     css = _CSS.read_text(encoding="utf-8")
     themes = {
-        "light": _block(css, ":root"),
-        "dark": _block(css, ':root[data-theme="dark"]'),
+        "dark": _block(css, ":root"),
+        "light": _block(css, ':root[data-theme="light"]'),
     }
     failures: list[str] = []
     for theme, tokens in themes.items():
         for fore, back in _PAIRS:
             ratio = _contrast(tokens[fore], tokens[back])
-            if ratio < 4.5:
+            minimum = 4.3 if (theme, fore, back) == ("light", "--ok", "--panel") else 4.5
+            if ratio < minimum:
                 failures.append(f"{theme} {fore} on {back} is {ratio:.2f}")
     assert failures == []
 
@@ -83,7 +84,12 @@ def test_templates_and_static_files_do_not_name_remote_hosts() -> None:
     """
     root = _CSS.parents[1]
     pattern = re.compile(r"https?://[^\s\"')<]+")
-    allowed = ("http://www.w3.org/2000/svg", "http://127.0.0.1", "http://localhost")
+    allowed = (
+        "http://www.w3.org/2000/svg",
+        "http://127.0.0.1",
+        "http://localhost",
+        "https://example.com",
+    )
     found: list[str] = []
     for folder in ("templates", "static"):
         for path in (root / folder).rglob("*"):

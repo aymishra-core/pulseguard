@@ -16,3 +16,5 @@ secret.key
 *.db
 *.pgdb
 .DS_Store
+
+ui-pack/

@@ -2,12 +2,7 @@
 
 ## 1.3.0 - 2026-10-28
 
-The console uses the telemetry look from the v0 screenshots: grid field, teal accent, HUD corners, and a pulsing status ring. The sidebar is split into Monitor and System, the top bar has the breadcrumb, status pill, Jump to…, theme icon, and account menu, and the product line shows the installed version.
-
-- One incident strip plus the hero. The strip says services are affected. The hero says what needs attention, how long it has run, and when the last check cycle was.
-- Summary tiles use short labels. The sparkline has its own column. Monitor cards show the kind icon, target, state, next-check ring, a 90-slice uptime bar, and Run now.
-- Live activity and a check stream sit under the cards. The stream is stored results only.
-- CSS is 29,944 bytes and JavaScript is 41,115 bytes, inside the existing 60 KB and 90 KB budgets.
+The console is the finished ui-pack, copied into the Jinja templates. The sidebar, top bar, incident banner, command palette, and page markup keep the pack's class names. Sample monitors, KPIs, incidents, certificates, and the preview strip are gone. The log reads `/api/activity`, Test this check posts `/monitors/probe`, and the chart uses stored latency. A grey slice is no data, not downtime. Times render in the viewer's zone. `ui-pack/` stays untracked.
 
 ## 1.2.2 - 2026-10-28
 

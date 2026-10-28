@@ -76,6 +76,32 @@ from pulseguard.web.board import (
 from pulseguard.web.console import _password_matches, _repository, _signed_in
 
 _KINDS = ("http", "keyword", "defacement", "tcp", "dns", "tls", "heartbeat")
+_ICONS = {
+    "http": "globe",
+    "keyword": "search",
+    "defacement": "eye",
+    "tcp": "plug",
+    "dns": "at",
+    "tls": "shield",
+    "heartbeat": "heart",
+}
+_BAR = {"up": "o", "down": "x", "gap": "g", "empty": "g"}
+_NAV = {
+    "dashboard": "dashboard",
+    "monitor_list": "monitors",
+    "monitor_new": "monitors",
+    "monitor_edit": "monitors",
+    "monitor_detail": "monitors",
+    "incident_list": "incidents",
+    "incident_detail": "incidents",
+    "certificates": "certificates",
+    "alerts": "alerts",
+    "sla": "sla",
+    "agents": "agents",
+    "data_page": "data",
+    "settings": "settings",
+    "help_page": "help",
+}
 _CSV_LIMIT = 1_000_000
 _BACKUP_LIMIT = 20_000_000
 _HTTP = {"http", "keyword", "defacement"}
@@ -116,8 +142,8 @@ def register_pages(app: Flask) -> None:
         if not isinstance(user, str):
             return user
         with _repository() as repo:
-            rows = _rows(repo)
-        return _page("monitors.html", rows=rows)
+            body = _dashboard_body(repo)
+        return _page("monitors.html", **body)
 
     @app.route("/monitors/new", methods=["GET", "POST"])
     def monitor_new() -> str | RedirectResponse | tuple[str, int]:
@@ -213,9 +239,12 @@ def register_pages(app: Flask) -> None:
             bar=segments(results, now),
             ping=_ping_line(record, options),
             series=[
-                [stamp(row.checked_at), round(row.latency_ms), bool(row.ok)]
+                [
+                    stamp(row.checked_at),
+                    None if row.message == "monitoring gap" else round(row.latency_ms),
+                    bool(row.ok) and row.message != "monitoring gap",
+                ]
                 for row in results[-400:]
-                if row.message != "monitoring gap"
             ],
             failures=[stamp(row.checked_at) for row in results[-400:] if not row.ok],
         )
@@ -884,36 +913,68 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
     cards = []
     counts = {"up": 0, "down": 0, "unknown": 0, "paused": 0}
     certs = 0
+    warns = 0
+    next_cert: int | None = None
+    next_cert_name = ""
+    tls_count = 0
     for record in records:
         result = latest.get(record.name)
         state = monitor_state(record, result)
         counts[state] = counts.get(state, 0) + 1
         mine = [item for item in results if item.monitor == record.name]
         recent = window(mine, now, 24)
-        if record.kind == "tls" and result is not None:
-            remaining = days_remaining(result.message, now)
-            if remaining is not None and remaining <= 30:
-                certs += 1
+        remaining = None
+        if record.kind == "tls":
+            tls_count += 1
+            if result is not None:
+                remaining = days_remaining(result.message, now)
+                if remaining is not None and remaining <= 30:
+                    certs += 1
+                if remaining is not None and (next_cert is None or remaining < next_cert):
+                    next_cert = remaining
+                    next_cert_name = record.name
         checked_at = None if result is None else result.checked_at
         raw = "" if result is None else result.message
         target = record.target if record.kind != "heartbeat" else "token hidden"
+        tone = state
+        if state == "unknown" or (state == "up" and remaining is not None and remaining <= 30):
+            tone = "warn"
+        if tone == "warn":
+            warns += 1
+        left = record.interval_seconds
+        if checked_at is not None:
+            elapsed = int((now - checked_at).total_seconds())
+            left = max(0, record.interval_seconds - elapsed)
+        if raw == "monitoring gap":
+            line = "No data"
+        elif result is None:
+            line = "No results yet. The first check has not run."
+        else:
+            line = f"{plain_message(raw).rstrip('.')} · {round(result.latency_ms)} ms"
+        labels = segments(mine, now, parts=48)
         cards.append(
             {
                 "name": record.name,
                 "kind": record.kind,
+                "icon": _ICONS.get(record.kind, "pulse"),
                 "target": target,
                 "state": state,
+                "tone": tone,
                 "message": raw,
-                "plain": plain_message(raw)
-                if raw
-                else "No results yet. The first check has not run.",
+                "plain": line,
                 "checked": clock(checked_at),
                 "checked_at": "" if checked_at is None else checked_at.isoformat(),
                 "interval": record.interval_seconds,
+                "left": left,
                 "uptime": _pct(uptime(recent)),
                 "spark": sparkline([item.latency_ms for item in mine]),
-                "points": [round(item.latency_ms) for item in mine[-20:]],
-                "segments": segments(mine, now),
+                "points": [
+                    round(item.latency_ms)
+                    for item in mine[-20:]
+                    if item.message != "monitoring gap"
+                ],
+                "segments": labels,
+                "bar": "".join(_BAR.get(part, "g") for part in labels),
             }
         )
     day = window(results, now, 24)
@@ -951,10 +1012,27 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "trend_down": hourly_counts(results, now, ok=False),
         "trend_uptime": hourly_counts(results, now, ok=True),
         "certs": certs,
+        "warns": warns,
+        "tls_count": tls_count,
+        "next_cert": next_cert,
+        "next_cert_name": next_cert_name,
+        "avg_ms": _average_ms(day),
+        "checks_today": sum(1 for item in results if item.checked_at.date() == now.date()),
+        "steps_done": sum(
+            (
+                True,
+                bool(records),
+                alerts_ready,
+                tls_count > 0,
+            )
+        ),
         "uptime": _pct(uptime(day)),
         "empty": not records,
         "activity": activity_lines(results),
         "ring": ring_state(list(records), latest, len(open_rows)),
+        "status_dot": _dot_from(
+            [monitor_state(record, latest.get(record.name)) for record in records]
+        ),
     }
 
 
@@ -975,8 +1053,14 @@ def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
         "last_cycle": body.get("last_cycle", ""),
         "stream": body.get("stream", []),
         "certs": body["certs"],
+        "warns": body.get("warns", 0),
+        "next_cert": body.get("next_cert"),
+        "next_cert_name": body.get("next_cert_name", ""),
+        "avg_ms": body.get("avg_ms"),
+        "checks_today": body.get("checks_today", 0),
         "uptime": body["uptime"],
         "ring": body.get("ring", "warn"),
+        "dot": body.get("status_dot", "unknown"),
         "activity": body.get("activity", []),
         "monitors": cards,
     }
@@ -1224,12 +1308,26 @@ def _shell(repo: Any) -> dict[str, object]:
         remaining = days_remaining(result.message, now)
         if remaining is not None and remaining <= 30:
             certs += 1
+    open_rows = repo.incidents(state="open")
+    banner_id = 0
+    banner_name = ""
+    banner_plain = ""
+    if open_rows:
+        earliest = min(open_rows, key=lambda row: row.started_at)
+        banner_id = earliest.id
+        banner_name = earliest.monitor
+        raw_cause = earliest.reason or earliest.cause
+        banner_plain = plain_message(raw_cause) if raw_cause else ""
     return {
         "dot": dot,
         "headline": headline,
-        "nav_incidents": len(repo.incidents(state="open")),
+        "nav": _NAV.get(request.endpoint or "", ""),
+        "nav_incidents": len(open_rows),
         "nav_certs": certs,
         "nav_names": [record.name for record in records],
+        "banner_id": banner_id,
+        "banner_name": banner_name,
+        "banner_plain": banner_plain,
         "version": __version__,
     }
 
@@ -1431,6 +1529,14 @@ def _stream_row(item: CheckResult) -> dict[str, object]:
         "latency": round(item.latency_ms),
         "plain": plain_message(item.message) if item.message else "",
     }
+
+
+def _average_ms(results: list[CheckResult]) -> int | None:
+    """Return the mean latency as a whole number of milliseconds."""
+    samples = [row.latency_ms for row in results if row.message != "monitoring gap"]
+    if not samples:
+        return None
+    return round(sum(samples) / len(samples))
 
 
 def _pct(value: float | None) -> str:

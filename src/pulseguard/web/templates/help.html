@@ -1,33 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Help · PulseGuard{% endblock %}
-{% block crumb %}Help{% endblock %}
-{% block body %}
-<h1>How PulseGuard works</h1>
-<p>Each monitor runs on its own interval, at least every 30 seconds. A result is stored even when you are not looking at this page.</p>
-<p>An incident opens after K failures in a row. The default K is 3, and you can set it from 1 to 20 on the Alerts page. Further failures while it is open do not open a second incident.</p>
-<p>An incident resolves after M successes in a row. The default M is 1. A success is counted even when another monitor this one depends on is down. A failure is not, so a shared outage stays attached to the monitor that failed first.</p>
-<p>Every open and resolve is written to the alert log. If SMTP is not configured the status is "not configured". The log is how you see alerts without a mail server.</p>
-<p>You type every monitor. Nothing is filled in for you. A defacement monitor can learn the SHA-256 of the first successful response, or you can type the hash. A heartbeat monitor shows its ping URL and token after you save it, with a button to copy each one.</p>
-<p>The public status page reads stored results. It does not contact the monitored targets, and it does not show targets or tokens.</p>
-<p>The same rules are written in docs/architecture.md and docs/security.md next to the program.</p>
-<input id="help-search" type="search" placeholder="Search help" aria-label="Search help" />
-<section data-guide>
-  <h2>Check kinds</h2>
-  <p data-guide>HTTP: did the address answer with the status you expect?</p>
-  <p data-guide>Keyword: does the visible page text include a phrase you chose?</p>
-  <p data-guide>Defacement: did the page bytes stay the same as the baseline hash?</p>
-  <p data-guide>TCP: does the port accept a connection?</p>
-  <p data-guide>DNS: does the name resolve to the addresses you listed?</p>
-  <p data-guide>TLS: will the certificate expire soon?</p>
-  <p data-guide>Heartbeat: did a job you run ping PulseGuard recently enough?</p>
+{% block title %}Help{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Help</span>{% endblock %}
+{% block page %}
+<div class="head"><div><div class="eyebrow">System</div><h1 class="title">Help</h1><p class="sub">How PulseGuard works, in short answers.</p></div></div>
+<section class="card card-pad">
+<h3>What is a kind?</h3>
+<p>Each monitor checks one thing: http, keyword, defacement, tcp, dns, tls or heartbeat.</p>
+<h3>Why 3 failures?</h3>
+<p>One failed check can be a blip. Three in a row opens an incident, so you are not woken for noise.</p>
+<h3>What is a heartbeat?</h3>
+<p>A job calls <code>/ping/&lt;token&gt;</code> when it runs. If it goes silent past the grace time, PulseGuard opens an incident. Use <code>pulseguard push</code> for an agent.</p>
+<h3>What does defacement do?</h3>
+<p>It learns a SHA-256 of the page body and alerts when it changes. Use Learn baseline after an intended edit. You can also learn from the first successful check.</p>
+<h3>Why is there a grey gap?</h3>
+<p>PulseGuard has no data for that slice. A gap never counts as downtime. Grey means no data.</p>
+<h3>Is the evidence pack legal advice?</h3>
+<p>No. It is not legal advice. It is a timestamped record of what PulseGuard saw.</p>
 </section>
-<section data-guide>
-  <h2>Glossary</h2>
-  <p data-guide>DNS is the name that points at an address.</p>
-  <p data-guide>TCP is a connection to a port, with no web page involved.</p>
-  <p data-guide>TLS is the certificate that expires on a date.</p>
-  <p data-guide>A heartbeat is a ping from a job. If the ping stops, the job may have stopped.</p>
-  <p data-guide>An incident is K failures in a row. One failure is a down check, not yet an incident.</p>
-</section>
-<p><button type="button" id="show-onboarding">Show the first-run checklist again</button></p>
 {% endblock %}

@@ -1,158 +1,82 @@
 {% extends "base.html" %}
-{% block title %}{% if editing %}Edit{% else %}Add{% endif %} monitor · PulseGuard{% endblock %}
-{% block crumb %}{% if editing %}Edit monitor{% else %}Add monitor{% endif %}{% endblock %}
-{% block body %}
-<h1>{% if editing %}Edit {{ values.name }}{% else %}Add a monitor{% endif %}</h1>
-<p class="steps" id="steps"><span class="on" data-step-tab="1">1. Kind</span><span data-step-tab="2">2. Details</span><span data-step-tab="3">3. Review</span></p>
-{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <div data-step="1">
-  <div class="kind-cards" id="kind-cards">
-    <button type="button" data-pick-kind="http"><strong>HTTP</strong><span class="help">Did the address answer with the status you expect? Example: 127.0.0.1</span></button>
-    <button type="button" data-pick-kind="keyword"><strong>Keyword</strong><span class="help">Does the visible page text include a phrase you chose?</span></button>
-    <button type="button" data-pick-kind="defacement"><strong>Defacement</strong><span class="help">Did the page bytes stay the same as the baseline hash?</span></button>
-    <button type="button" data-pick-kind="tcp"><strong>TCP</strong><span class="help">Does the port accept a connection? Example: 127.0.0.1 port 8080</span></button>
-    <button type="button" data-pick-kind="dns"><strong>DNS</strong><span class="help">Does the name resolve to the addresses you listed?</span></button>
-    <button type="button" data-pick-kind="tls"><strong>TLS</strong><span class="help">Will the certificate expire soon?</span></button>
-    <button type="button" data-pick-kind="heartbeat"><strong>Heartbeat</strong><span class="help">Did a job you run ping PulseGuard recently enough?</span></button>
-  </div>
-  <label for="kind">Kind</label>
-  <select id="kind" name="kind">
-    {% for kind in kinds %}
-    <option value="{{ kind }}" {% if values.kind == kind %}selected{% endif %}>{{ kind }}</option>
-    {% endfor %}
-  </select>
-  <p class="help">The kind picks which check runs. The fields below change with it.</p>
-  </div>
-  <div data-step="2" class="group">
-  <label for="name">Name</label>
-  <input id="name" name="name" value="{{ values.name or '' }}" {% if editing %}readonly{% endif %} required />
-  <p class="help">1–128 letters, digits, _ or -. Shown on the dashboard.</p>
-  <div data-kinds="http keyword defacement tcp dns tls">
-    <label for="target">Target</label>
-    <input id="target" name="target" value="{{ values.target or '' }}" />
-    <p class="help">URL for HTTP checks, hostname for TCP, DNS, and TLS. Private addresses are allowed unless you turn that off.</p>
-  </div>
-  <div data-kinds="heartbeat">
-    <label for="token">Ping token</label>
-    <input id="token" name="token" value="{{ values.token or '' }}" />
-    <p class="help">Leave blank to generate one. It is the secret in the ping URL.</p>
-    {% if values.token %}
-    <p>PulseGuard address</p>
-    <p><code>{{ request.host_url.rstrip('/') }}</code>
-    <button type="button" data-copy="{{ request.host_url.rstrip('/') }}">Copy address</button></p>
-    <p>Token</p>
-    <p><code id="ping-token">{{ values.token }}</code>
-    <button type="button" data-copy="{{ values.token }}">Copy token</button></p>
-    <p>Ping URL</p>
-    <p><code id="ping-url">{{ request.host_url }}ping/{{ values.token }}</code>
-    <button type="button" data-copy="{{ request.host_url }}ping/{{ values.token }}">Copy ping URL</button></p>
-    <p><code>curl -fsS '{{ request.host_url }}ping/{{ values.token }}'</code>
-    <button type="button" data-copy="curl -fsS '{{ request.host_url }}ping/{{ values.token }}'">Copy curl</button></p>
-    <p class="help">Paste the address and token into whatever sends the ping. Shown only on this page.</p>
-    {% endif %}
-  </div>
-  <label for="interval">Interval (seconds)</label>
-  <input id="interval" name="interval" value="{{ values.interval or 30 }}" />
-  <p class="help">At least 30 seconds.</p>
-  <label for="timeout">Timeout (seconds)</label>
-  <input id="timeout" name="timeout" value="{{ values.timeout or '' }}" />
-  <p class="help">Optional. At most 120 seconds.</p>
-  <div data-kinds="http keyword defacement">
-    <label for="expected_status">Expected status</label>
-    <input id="expected_status" name="expected_status" value="{{ values.expected_status or '' }}" />
-    <p class="help">Blank means 200.</p>
-    <label for="method">Method</label>
-    <input id="method" name="method" value="{{ values.method or '' }}" />
-    <p class="help">GET or HEAD. Redirects are not followed.</p>
-    <label for="retries">Retries</label>
-    <input id="retries" name="retries" value="{{ values.retries or '' }}" />
-    <label for="retry_backoff">Retry backoff (seconds)</label>
-    <input id="retry_backoff" name="retry_backoff" value="{{ values.retry_backoff or '' }}" />
-  </div>
-  <div data-kinds="keyword defacement">
-    <label for="keyword">Keyword</label>
-    <input id="keyword" name="keyword" value="{{ values.keyword or '' }}" />
-    <p class="help">Matched against visible text. script and style tags are ignored.</p>
-    <label for="max_body_bytes">Max body bytes</label>
-    <input id="max_body_bytes" name="max_body_bytes" value="{{ values.max_body_bytes or '' }}" />
-  </div>
-  <div data-kinds="defacement">
-    <fieldset>
-      <legend>Baseline</legend>
-      <label><input type="radio" name="baseline" value="learn" {% if values.baseline != 'manual' %}checked{% endif %} /> Learn from the first successful check</label>
-      <p class="help">The first response with the expected status and the keyword is stored as the SHA-256 baseline.</p>
-      <label><input type="radio" name="baseline" value="manual" {% if values.baseline == 'manual' %}checked{% endif %} /> Enter hash manually</label>
-    </fieldset>
-    {% if values.baseline != 'manual' and values.expected_sha256 %}
-    <p>Learned baseline <code>{{ values.expected_sha256 }}</code></p>
-    {% endif %}
-    <div data-baseline="manual">
-      <label for="expected_sha256">Expected SHA-256</label>
-      <input id="expected_sha256" name="expected_sha256" value="{{ values.expected_sha256 or '' }}" />
-      <p class="help">64 hex characters. The hash is of the raw response bytes.</p>
-    </div>
-    <label for="alert_after">Alert after</label>
-    <input id="alert_after" name="alert_after" value="{{ values.alert_after or '' }}" />
-    <p class="help">How many mismatches before the result is critical. 1–20.</p>
-  </div>
-  <div data-kinds="tcp tls">
-    <label for="port">Port</label>
-    <input id="port" name="port" value="{{ values.port or '' }}" />
-    <p class="help">1–65535.</p>
-  </div>
-  <div data-kinds="dns">
-    <label for="expected">Expected addresses</label>
-    <input id="expected" name="expected" value="{{ values.expected or '' }}" />
-    <p class="help">Comma-separated IP addresses. 1–8.</p>
-  </div>
-  <div data-kinds="heartbeat">
-    <label for="grace_seconds">Grace (seconds)</label>
-    <input id="grace_seconds" name="grace_seconds" value="{{ values.grace_seconds or '' }}" />
-    <p class="help">How long a ping stays fresh. 30–604800. Blank means 120.</p>
-  </div>
-  <div data-kinds="http keyword defacement tcp dns tls">
-    <label><input type="checkbox" name="allow_private" value="1" {% if values.allow_private != false %}checked{% endif %} /> Allow private and loopback targets</label>
-    <p class="help">Turn this off to reject localhost and private addresses. Names are not resolved during the check of that rule.</p>
-  </div>
-  <label for="depends_on">Depends on</label>
-  <select id="depends_on" name="depends_on" multiple>
-    {% for other in others %}
-    <option value="{{ other }}" {% if values.depends_on and other in values.depends_on %}selected{% endif %}>{{ other }}</option>
-    {% endfor %}
-  </select>
-  <p class="help">While a selected monitor is down, a failure here does not open a new incident.</p>
-  <label><input type="checkbox" name="enabled" value="1" {% if values.enabled != false %}checked{% endif %} /> Enabled</label>
-  <p id="scheme-offer" class="help" hidden></p>
-  <p id="probe-result" class="panel" hidden></p>
-  <p><button type="button" id="probe" class="btn-secondary">Test this check now</button></p>
-  </div>
-  <div data-step="3">
-    <div id="review" class="panel"></div>
-  </div>
-  <p class="toolbar">
-    <button type="button" id="step-back" class="btn-secondary">Back</button>
-    <button type="button" id="step-next">Next</button>
-    <button type="submit" id="save-monitor">Save</button>
-  </p>
-</form>
-{% if editing %}
-<form method="post" action="{{ url_for('monitor_check', name=values.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-secondary">Run check now</button>
-</form>
-<form method="post" action="{{ url_for('monitor_pause', name=values.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-secondary">{% if values.enabled == false %}Resume{% else %}Pause{% endif %}</button>
-</form>
-<form method="post" action="{{ url_for('monitor_duplicate', name=values.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-secondary">Duplicate</button>
-</form>
-<form method="post" action="{{ url_for('monitor_delete', name=values.name) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-danger">Delete</button>
-</form>
+{% block title %}{% if editing %}Edit {{ values.name }}{% else %}Add monitor{% endif %}{% endblock %}
+{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>{% if editing %}Edit{% else %}Add monitor{% endif %}</span>{% endblock %}
+{% block page %}
+<div class="head">
+<div><div class="eyebrow">Monitor</div><h1 class="title">{% if editing %}Edit {{ values.name }}{% else %}Add monitor{% endif %}</h1><p class="sub">Pick what to watch, say where, then test it before you save.</p></div>
+</div>
+{% if error %}<div class="banner" role="alert">{{ error }}</div>{% endif %}
+<form id="monitor-form" method="post" action="{% if editing %}{{ url_for('monitor_edit', name=values.name) }}{% else %}{{ url_for('monitor_new') }}{% endif %}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input id="f-kind" type="hidden" name="kind" value="{{ values.kind or 'http' }}">
+<input type="checkbox" name="enabled" value="1" {% if values.enabled %}checked{% endif %} hidden>
+<div class="wiz" data-wizard data-initial="{{ values.kind or 'http' }}">
+<span class="w on"><b>1</b>Kind</span><span class="ln"></span>
+<span class="w"><b>2</b>Target</span><span class="ln"></span>
+<span class="w"><b>3</b>Schedule</span><span class="ln"></span>
+<span class="w"><b>4</b>Review</span>
+</div>
+<div>
+<section class="sect on">
+<div class="kinds">
+<button class="kind" type="button" data-kind="http" aria-pressed="{{ 'true' if (values.kind or 'http') == 'http' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#globe"/></svg></span><b>HTTP</b><p>Fetch a URL and check status code and speed.</p><code>https://example.com</code></button>
+<button class="kind" type="button" data-kind="keyword" aria-pressed="{{ 'true' if values.kind == 'keyword' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#search"/></svg></span><b>Keyword</b><p>Pass only if a word or phrase is on the page.</p><code>https://example.com/shop</code></button>
+<button class="kind" type="button" data-kind="defacement" aria-pressed="{{ 'true' if values.kind == 'defacement' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#eye"/></svg></span><b>Defacement</b><p>Alert when page content changes from a learned baseline.</p><code>SHA-256 of body</code></button>
+<button class="kind" type="button" data-kind="tcp" aria-pressed="{{ 'true' if values.kind == 'tcp' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#plug"/></svg></span><b>TCP port</b><p>Open a socket to host and port.</p><code>host:port</code></button>
+<button class="kind" type="button" data-kind="dns" aria-pressed="{{ 'true' if values.kind == 'dns' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#at"/></svg></span><b>DNS</b><p>Resolve a hostname and time the answer.</p><code>example.com</code></button>
+<button class="kind" type="button" data-kind="tls" aria-pressed="{{ 'true' if values.kind == 'tls' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#shield"/></svg></span><b>TLS certificate</b><p>Warn at 30, 14, 7, 3 and 1 days before expiry.</p><code>example.com</code></button>
+<button class="kind" type="button" data-kind="heartbeat" aria-pressed="{{ 'true' if values.kind == 'heartbeat' else 'false' }}"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#heart"/></svg></span><b>Heartbeat</b><p>A job pings PulseGuard; silence past grace is an incident.</p><code>/ping/&lt;token&gt;</code></button>
+</div>
+<div class="row-act"><button class="btn btn-primary" data-next type="button">Continue <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+</section>
+<section class="sect">
+<div class="card card-pad">
+<div class="grid2">
+<div class="field"><label for="f-name">Name</label><input id="f-name" name="name" type="text" value="{{ values.name or '' }}" placeholder="web" autocomplete="off" {% if editing %}readonly{% endif %}><span class="hint">Letters, digits, _ and - only. Up to 128.</span><span class="err">Use letters, digits, _ or - (no spaces).</span></div>
+<div class="field"><label for="f-target">Target</label><input id="f-target" name="target" type="text" value="{{ values.target or '' }}" placeholder="https://example.com" autocomplete="off"><span class="hint">Include https:// for web checks. Use a bare hostname for tcp, dns and tls.</span><span class="err">Enter a full URL such as https://example.com</span></div>
+<div class="field" data-only="keyword defacement" hidden><label for="keyword">Keyword</label><input id="keyword" name="keyword" type="text" value="{{ values.keyword or '' }}" placeholder="Acme Shop"></div>
+<div class="field" data-only="http keyword defacement"><label for="expected_status">Expected status</label><input id="expected_status" name="expected_status" type="text" value="{{ values.expected_status or '200' }}"></div>
+<div class="field" data-only="http keyword defacement"><label for="method">Method</label><input id="method" name="method" type="text" value="{{ values.method or 'GET' }}"></div>
+<div class="field" data-only="tcp tls" hidden><label for="port">Port</label><input id="port" name="port" type="number" value="{{ values.port or '443' }}"></div>
+<div class="field" data-only="dns" hidden><label for="expected">Expected answers</label><input id="expected" name="expected" type="text" value="{{ values.expected or '' }}" placeholder="127.0.0.1"><span class="hint">Comma-separated.</span></div>
+<div class="field" data-only="heartbeat" hidden><label for="token">Token</label><input id="token" name="token" type="text" value="{{ values.token or '' }}" autocomplete="off"><span class="hint">Leave blank to generate one. It stays hidden on the list.</span></div>
+<div class="field" data-only="heartbeat" hidden><label for="grace_seconds">Grace period (seconds)</label><input id="grace_seconds" name="grace_seconds" type="number" value="{{ values.grace_seconds or '60' }}"><span class="hint">30 to 604800. Silence longer than this opens an incident.</span></div>
+<div class="field" data-only="defacement" hidden><span class="lab">Baseline</span><label><input type="radio" name="baseline" value="learn" {% if values.baseline != 'manual' %}checked{% endif %}> Learn from the first successful check</label><label><input type="radio" name="baseline" value="manual" {% if values.baseline == 'manual' %}checked{% endif %}> Type a hash</label><label for="expected_sha256">expected_sha256</label><input id="expected_sha256" name="expected_sha256" type="text" value="{{ values.expected_sha256 or '' }}" autocomplete="off"></div>
+</div>
+{% if others %}
+<div class="field"><label for="depends_on">Depends on</label><select id="depends_on" name="depends_on" multiple size="4">{% for name in others %}<option value="{{ name }}" {% if name in (values.depends_on or []) %}selected{% endif %}>{{ name }}</option>{% endfor %}</select><span class="hint">At most 8. A failing dependency suppresses a second incident.</span></div>
 {% endif %}
+<div class="row-act"><button class="btn btn-ghost" data-prev type="button">Back</button><button class="btn btn-primary" data-next type="button">Continue <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+</div>
+</section>
+<section class="sect">
+<div class="card card-pad">
+<div class="grid3">
+<div class="field"><span class="lab">Check every</span><div class="stepper" data-min="30" data-max="86400" data-step="30"><button type="button" aria-label="Less">−</button><input id="f-int" name="interval" type="number" value="{{ values.interval or 60 }}"><button type="button" aria-label="More">+</button></div><span class="hint">Seconds. Minimum 30.</span></div>
+<div class="field"><span class="lab">Timeout</span><div class="stepper" data-min="1" data-max="120" data-step="1"><button type="button" aria-label="Less">−</button><input id="timeout" name="timeout" type="number" value="{{ values.timeout or 10 }}"><button type="button" aria-label="More">+</button></div><span class="hint">Seconds. Up to 120.</span></div>
+<div class="field"><span class="lab">Retries before failing</span><div class="stepper" data-min="1" data-max="5" data-step="1"><button type="button" aria-label="Less">−</button><input id="retries" name="retries" type="number" value="{{ values.retries or 3 }}"><button type="button" aria-label="More">+</button></div><span class="hint">1 to 5, with backoff.</span></div>
+</div>
+<div class="field"><label for="retry_backoff">Retry backoff</label><input id="retry_backoff" name="retry_backoff" type="text" value="{{ values.retry_backoff or '' }}" placeholder="1"></div>
+<div class="switch-row">
+<button class="switch" type="button" role="switch" aria-checked="{{ 'true' if values.allow_private else 'false' }}" aria-controls="allow-private" data-label="Allow private addresses" aria-label="Allow private addresses"></button>
+<input id="allow-private" name="allow_private" type="checkbox" value="1" {% if values.allow_private %}checked{% endif %} hidden>
+<div><b>Allow private addresses</b><div class="hint">Needed for 127.0.0.1 and LAN hosts. Off by default.</div></div>
+</div>
+<div class="row-act"><button class="btn btn-ghost" data-prev type="button">Back</button><button class="btn btn-primary" data-next type="button">Continue <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+</div>
+</section>
+<section class="sect">
+<div class="card card-pad stack">
+<dl class="kv review"><dt>Kind</dt><dd id="r-kind">{{ values.kind or 'http' }}</dd><dt>Name</dt><dd id="r-name">{{ values.name or '-' }}</dd><dt>Target</dt><dd id="r-target">{{ values.target or '-' }}</dd><dt>Interval</dt><dd id="r-int">{{ values.interval or 60 }} s</dd><dt>Retries</dt><dd id="r-ret">{{ values.retries or 3 }} attempts</dd></dl>
+<div class="result" id="pr"></div>
+<div class="row-act">
+<button class="btn btn-ghost" data-prev type="button">Back</button>
+<button class="btn" data-probe="#pr" type="button"><svg class="i i-sm" aria-hidden="true"><use href="#play"/></svg>Test this check</button>
+<button class="btn btn-primary" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#check"/></svg>Save monitor</button>
+</div>
+<span class="hint">Testing is rate limited to 30 per hour and never creates an incident.</span>
+</div>
+</section>
+</div>
+</form>
 {% endblock %}

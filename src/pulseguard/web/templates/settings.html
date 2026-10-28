@@ -1,25 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Settings · PulseGuard{% endblock %}
-{% block crumb %}Settings{% endblock %}
-{% block body %}
-<h1>Settings</h1>
-{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <label for="current_password">Current password</label>
-  <input id="current_password" name="current_password" type="password" autocomplete="current-password" />
-  <label for="new_password">New password</label>
-  <input id="new_password" name="new_password" type="password" autocomplete="new-password" />
-  <p class="help">Leave the new password blank to keep the current one. A new one needs at least 8 characters.</p>
-  <label><input type="checkbox" name="public_status" value="1" {% if public %}checked{% endif %} /> Public status page</label>
-  <p class="help">When this is off, /status does not list monitors.</p>
-  <p><button type="submit">Save</button></p>
+{% block title %}Settings{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Settings</span>{% endblock %}
+{% block page %}
+<div class="head"><div><div class="eyebrow">System</div><h1 class="title">Settings</h1><p class="sub">Rules that decide when an incident opens and how the API is protected.</p></div></div>
+{% if error %}<div class="banner" role="alert">{{ error }}</div>{% endif %}
+<section class="card card-pad">
+<h3>Account</h3>
+<form method="post" action="{{ url_for('settings') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="switch-row">
+<button class="switch" type="button" role="switch" aria-checked="{{ 'true' if public else 'false' }}" aria-controls="public-status" data-label="Public status" aria-label="Public status"></button>
+<input id="public-status" name="public_status" type="checkbox" value="1" {% if public %}checked{% endif %} hidden>
+<div><b>Public status page</b><div class="hint">Turn this off to hide the public board.</div></div>
+</div>
+<div class="grid2">
+<div class="field"><label for="current_password">Current password</label><input id="current_password" name="current_password" type="password" autocomplete="current-password"></div>
+<div class="field"><label for="new_password">New password</label><input id="new_password" name="new_password" type="password" autocomplete="new-password"></div>
+</div>
+<button class="btn btn-primary" type="submit">Save changes</button>
 </form>
-<h2>API key</h2>
-<p><code id="api-key">{{ api_key }}</code> <button type="button" class="btn-secondary" data-copy="{{ api_key }}">Copy API key</button></p>
-<p class="help">Send it as X-API-Key on POST /api/monitors. It is not written to the log.</p>
-<form method="post" action="{{ url_for('settings_api_key') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit" class="btn-secondary">Regenerate API key</button>
-</form>
+</section>
+<section class="card card-pad">
+<h3>API key</h3>
+<p>Sent as <code>X-API-Key</code> to <code>POST /api/monitors</code>.</p>
+<div class="cp"><code>{{ api_key }}</code><button class="btn btn-sm" type="button" data-copy="{{ api_key }}">Copy</button></div>
+<form method="post" action="{{ url_for('settings_api_key') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Rotate key</button></form>
+</section>
+<section class="card card-pad">
+<h3>Retention</h3>
+<p>Evidence packs are kept 180 days. Check results follow the storage retention window.</p>
+<p>Signed in as {{ user }}. Version {{ version }}.</p>
+<form method="post" action="{{ url_for('console_logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-ghost" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#out"/></svg>Sign out</button></form>
+</section>
 {% endblock %}

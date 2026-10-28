@@ -1,67 +1,49 @@
 {% extends "base.html" %}
-{% block title %}Data · PulseGuard{% endblock %}
-{% block crumb %}Data{% endblock %}
-{% block body %}
-<h1>Data</h1>
-<div class="cards-3">
-<section class="panel">
-<h2>Export</h2>
-<p class="help">Download stored results or the monitor list. The file stays on this machine.</p>
+{% block title %}Data{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Data</span>{% endblock %}
+{% block page %}
+<div class="head"><div><div class="eyebrow">System</div><h1 class="title">Data</h1><p class="sub">Export, import, back up and verify. All of it stays on this machine.</p></div></div>
+<section class="grid2">
+<section class="card card-pad">
+<h3>Export</h3>
+<p>Download monitors and history.</p>
 <form method="post" action="{{ url_for('data_export') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <label for="table">Table</label>
-  <select id="table" name="table"><option>results</option><option>monitors</option></select>
-  <label for="format">Format</label>
-  <select id="format" name="format"><option>csv</option><option>json</option></select>
-  <button type="submit">Download</button>
-</form>
-</section>
-<section class="panel">
-<h2>Import</h2>
-<p class="help">CSV header: name, kind, target, interval_seconds, enabled. Limit 1 MB. A bad row names its line and nothing is imported.</p>
-<form method="post" action="{{ url_for('data_import') }}" enctype="multipart/form-data">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <label class="drop" for="import-file">CSV file
-    <input id="import-file" type="file" name="file" />
-    <span class="file-meta"></span>
-  </label>
-  <button type="submit">Import</button>
-</form>
-</section>
-<section class="panel">
-<h2>Backup and restore</h2>
-<form method="post" action="{{ url_for('data_backup') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit">Download backup</button>
-</form>
-<form method="post" action="{{ url_for('data_verify') }}" enctype="multipart/form-data">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <label class="drop" for="verify-file">Backup file
-    <input id="verify-file" type="file" name="file" />
-    <span class="file-meta"></span>
-  </label>
-  <button type="submit" class="btn-secondary">Verify backup</button>
-</form>
-<p class="help">Verify prints the checksum. Restore replaces this database.</p>
-<button type="button" class="btn-secondary" data-open="restore-dialog">Restore</button>
-</section>
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="grid2">
+<div class="field"><label for="table">Table</label><select id="table" name="table"><option value="monitors">Monitors</option><option value="results">Results</option></select></div>
+<div class="field"><label for="format">Format</label><select id="format" name="format"><option value="csv">CSV</option><option value="json">JSON</option></select></div>
 </div>
-<dialog id="restore-dialog">
-  <h2>Restore</h2>
-  <p>This replaces the current database. A safety backup is written first.</p>
-  <form method="post" action="{{ url_for('data_restore') }}" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <label class="drop" for="restore-file">Backup file
-      <input id="restore-file" type="file" name="file" />
-      <span class="file-meta"></span>
-    </label>
-    <label for="confirm">Type RESTORE</label>
-    <input id="confirm" name="confirm" autocomplete="off" />
-    <p class="help">Limit 20 MB.</p>
-    <p>
-      <button type="submit">Restore</button>
-      <button type="button" class="btn-secondary" data-close>Cancel</button>
-    </p>
-  </form>
-</dialog>
+<button class="btn btn-primary" type="submit">Download</button>
+</form>
+</section>
+<section class="card card-pad">
+<h3>Import</h3>
+<p>CSV of monitors. Choose a file.</p>
+<form method="post" action="{{ url_for('data_import') }}" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label class="drop">Drop a file or click to choose<input class="sr" name="file" type="file" accept=".csv,text/csv"><b>CSV</b></label>
+<button class="btn" type="submit">Import</button>
+</form>
+</section>
+<section class="card card-pad">
+<h3>Backup</h3>
+<p>PGDB archive with a SHA-256 checksum.</p>
+<form method="post" action="{{ url_for('data_backup') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary" type="submit">Create backup</button></form>
+<form method="post" action="{{ url_for('data_verify') }}" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label class="drop">Verify a backup<input class="sr" name="file" type="file"><b>Choose a backup</b></label>
+<button class="btn" type="submit">Verify</button>
+</form>
+</section>
+<section class="card card-pad">
+<h3>Restore</h3>
+<p>Replaces current data. A corrupt backup is rejected before anything changes.</p>
+<form method="post" action="{{ url_for('data_restore') }}" enctype="multipart/form-data">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="field"><label for="confirm">Type RESTORE</label><input id="confirm" name="confirm" type="text" autocomplete="off"></div>
+<label class="drop">Restore from backup…<input class="sr" name="file" type="file"><b>Choose a backup</b></label>
+<button class="btn btn-danger" type="submit">Restore</button>
+</form>
+</section>
+</section>
 {% endblock %}

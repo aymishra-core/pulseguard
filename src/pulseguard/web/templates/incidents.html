@@ -1,31 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Incidents · PulseGuard{% endblock %}
-{% block crumb %}Incidents{% endblock %}
-{% block body %}
-<h1>Incidents</h1>
-<p class="note">{{ advice }}</p>
-<p class="segmented">
-  <a href="{{ url_for('incident_list', tab='open') }}" {% if tab == 'open' %}aria-current="page"{% endif %}>Open</a>
-  <a href="{{ url_for('incident_list', tab='resolved') }}" {% if tab == 'resolved' %}aria-current="page"{% endif %}>Resolved</a>
-</p>
-{% if not rows %}
-<p class="empty">No {{ tab }} incidents.</p>
+{% block title %}Incidents{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Incidents</span>{% endblock %}
+{% block page %}
+<div class="head">
+<div><div class="eyebrow">Monitor</div><h1 class="title">Incidents</h1><p class="sub">Opened after repeated failures, resolved on the first success.</p></div>
+</div>
+<div class="tabs" role="tablist">
+<a class="btn btn-sm {% if tab == 'open' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', tab='open') }}">Open</a>
+<a class="btn btn-sm {% if tab == 'resolved' %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ url_for('incident_list', tab='resolved') }}">Resolved</a>
+</div>
+<section class="card tablewrap">
+<table>
+<thead><tr><th>ID</th><th>Monitor</th><th>Status</th><th>Opened</th><th>Duration</th><th></th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+<td>INC-{{ '%04d'|format(row.id) }}</td>
+<td>{{ row.monitor }}<div class="hint">{{ row.reason or row.cause }}</div></td>
+<td><span class="pill {{ 'down' if row.state == 'open' else 'up' }}">{{ row.state }}</span></td>
+<td><time datetime="{{ row.started_at }}">{{ clock(row.started_at) }}</time></td>
+<td>{{ duration(row.started_at, row.ended_at) }}</td>
+<td><a class="btn btn-sm" href="{{ url_for('incident_detail', incident_id=row.id) }}">View</a></td>
+</tr>
 {% else %}
-<table data-more>
-  <thead>
-    <tr><th>Monitor</th><th>Started</th><th>Ended</th><th>Duration</th><th>Cause</th></tr>
-  </thead>
-  <tbody>
-    {% for row in rows %}
-    <tr>
-      <td><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.monitor }}</a></td>
-      <td><time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time></td>
-      <td>{% if row.ended_at %}<time class="when" datetime="{{ stamp(row.ended_at) }}">{{ clock(row.ended_at) }}</time>{% else %}—{% endif %}</td>
-      <td {% if tab == 'open' %}data-tick="{{ row.started_at }}"{% endif %}>{{ duration(row.started_at, row.ended_at) }}</td>
-      <td>{{ row.cause or row.reason }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
+<tr><td colspan="6">{% if tab == 'resolved' %}No resolved incidents{% else %}No open incidents{% endif %}</td></tr>
+{% endfor %}
+</tbody>
 </table>
-{% endif %}
+</section>
+<p class="hint">{{ advice }}</p>
 {% endblock %}

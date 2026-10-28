@@ -1,24 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Certificates · PulseGuard{% endblock %}
-{% block crumb %}Certificates{% endblock %}
-{% block body %}
-<h1>Certificates</h1>
-<p class="help">ok is more than 30 days, warn is 8–30, critical is 7 or fewer. The word is the signal.</p>
-{% if not rows %}
-<p class="empty">No TLS monitors yet.</p>
+{% block title %}Certificates{% endblock %}
+{% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Certificates</span>{% endblock %}
+{% block page %}
+<div class="head">
+<div><div class="eyebrow">Monitor</div><h1 class="title">Certificates</h1><p class="sub">TLS certificates PulseGuard is watching, soonest expiry first.</p></div>
+<div class="actions"><a class="btn btn-primary" href="{{ url_for('monitor_new') }}">Watch certificate</a></div>
+</div>
+<section class="stats">
+<article class="stat"><small>Watched</small><b>{{ rows|length }}</b><small>TLS monitors</small></article>
+<article class="stat"><small>Expiring within 30 d</small><b>{{ nav_certs }}</b></article>
+<article class="stat"><small>Next expiry</small><b>{% if rows and rows[0].days is not none %}{{ rows[0].days }} d{% else %}—{% endif %}</b></article>
+</section>
+<section class="card">
+{% for row in rows %}
+<div class="cert">
+<span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#shield"/></svg></span>
+<div><a class="mon-name" href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a><div class="hint">{{ row.message }}</div></div>
+<div class="progress"><span class="pill {{ row.band if row.band in ['ok','warn','critical'] else 'unknown' }}">{% if row.days is none %}No data{% else %}{{ row.days }} days left{% endif %}</span></div>
+<b>{% if row.days is none %}—{% else %}{{ row.days }} d{% endif %}</b>
+</div>
 {% else %}
-<table>
-  <thead><tr><th>Monitor</th><th>Days left</th><th>Band</th><th>Message</th></tr></thead>
-  <tbody>
-    {% for row in rows %}
-    <tr>
-      <td><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></td>
-      <td class="metric">{{ row.days if row.days is not none else "unknown" }}{% if row.days is not none %}<meter min="0" max="90" value="{{ row.days if row.days > 0 else 0 }}" aria-label="days left"></meter>{% endif %}</td>
-      <td><span class="pill {{ row.band }}">{{ row.band }}</span> {% if row.band == 'critical' %}Renew now.{% elif row.band == 'warn' %}Renew this month.{% elif row.band == 'ok' %}No action yet.{% endif %}</td>
-      <td>{{ row.message }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endif %}
+<div class="empty"><b>No certificates yet</b><p>Add a TLS monitor to watch an expiry.</p></div>
+{% endfor %}
+</section>
+<p class="hint">PulseGuard warns at 30, 14, 7, 3 and 1 days before expiry, once per threshold.</p>
 {% endblock %}

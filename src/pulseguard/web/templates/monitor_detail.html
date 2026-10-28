@@ -1,104 +1,86 @@
 {% extends "base.html" %}
-{% block title %}{{ record.name }} · PulseGuard{% endblock %}
-{% block crumb %}{{ record.name }}{% endblock %}
-{% block body %}
-<header class="hero">
-  <div class="ring {% if message == 'monitoring gap' %}warn{% else %}{{ state }}{% endif %}" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="{% if state == 'up' and message != 'monitoring gap' %}#i-check{% elif state == 'paused' %}#i-pause{% else %}#i-alert{% endif %}"/></svg></div>
-  <div>
-    <h1>{{ record.name }}</h1>
-    <p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }} · {{ state_for }}</p>
-    <p>{{ plain }}</p>
-    {% if record.kind != "heartbeat" %}<p>Target {{ record.target }}</p>{% endif %}
-  </div>
-</header>
-<p class="muted" id="zone">Times are stored in UTC and shown in your local time zone.</p>
-{% if record.kind == "heartbeat" %}
-<p>PulseGuard address</p>
-<p><code>{{ request.host_url.rstrip('/') }}</code>
-<button type="button" data-copy="{{ request.host_url.rstrip('/') }}">Copy address</button></p>
-<p>Token</p>
-<p><code>{{ record.target }}</code>
-<button type="button" data-copy="{{ record.target }}">Copy token</button></p>
-<p>Ping URL</p>
-<p><code>{{ request.host_url }}ping/{{ record.target }}</code>
-<button type="button" data-copy="{{ request.host_url }}ping/{{ record.target }}">Copy ping URL</button></p>
-<p><code id="curl-line">{{ ping }}</code>
-<button type="button" data-copy="{{ ping }}">Copy curl</button></p>
-{% endif %}
-<div class="toolbar">
-  <form method="post" action="{{ url_for('monitor_check', name=record.name) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <button type="submit">Run now</button>
-  </form>
-  <form method="post" action="{{ url_for('monitor_pause', name=record.name) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <button type="submit" class="btn-secondary">{% if record.enabled %}Pause{% else %}Resume{% endif %}</button>
-  </form>
-  <a class="button btn-secondary" href="{{ url_for('monitor_edit', name=record.name) }}">Edit</a>
-  <form method="post" action="{{ url_for('monitor_duplicate', name=record.name) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <button type="submit" class="btn-secondary">Duplicate</button>
-  </form>
-  <button type="button" class="btn-danger" data-open="delete-dialog">Delete</button>
+{% block title %}{{ record.name }}{% endblock %}
+{% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>{{ record.name }}</span>{% endblock %}
+{% block page %}
+{% set icon = {'http':'globe','keyword':'search','defacement':'eye','tcp':'plug','dns':'at','tls':'shield','heartbeat':'heart'}.get(record.kind, 'pulse') %}
+<div class="dhead">
+<span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#{{ icon }}"/></svg></span>
+<div class="grow">
+<div class="eyebrow">{{ record.kind }} · {% if record.kind == 'heartbeat' %}token hidden{% else %}{{ record.target }}{% endif %} · every {{ record.interval_seconds }} s</div>
+<h1 class="title">{{ record.name }}</h1>
+<p class="sub">{{ plain }}</p>
 </div>
-<dialog id="delete-dialog">
-  <form method="post" action="{{ url_for('monitor_delete', name=record.name) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <h2>Delete {{ record.name }}?</h2>
-    <p>The monitor leaves the catalog. Stored results stay in the database.</p>
-    <button type="submit" class="btn-danger">Delete</button>
-    <button type="button" class="btn-secondary" data-close>Cancel</button>
-  </form>
-</dialog>
-<section class="summary">
-  <article class="stat"><h2>24-hour</h2><p>{{ uptime_24 }}</p></article>
-  <article class="stat"><h2>7-day</h2><p>{{ uptime_7 }}</p></article>
-  <article class="stat"><h2>30-day</h2><p>{{ uptime_30 }}</p></article>
-  <article class="stat"><h2>Average</h2><p>{{ average }}</p></article>
-  <article class="stat"><h2>p95</h2><p>{{ p95 }}</p></article>
-  <article class="stat"><h2>Today</h2><p class="metric">{{ checks_today }}</p></article>
+<span class="pill {{ state }}">{{ state }}</span>
+<div class="actions">
+<form method="post" action="{{ url_for('monitor_check', name=record.name) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#refresh"/></svg>Check now</button></form>
+<form method="post" action="{{ url_for('monitor_pause', name=record.name) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-ghost" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#{% if state == 'paused' %}play{% else %}pause{% endif %}"/></svg>{% if state == 'paused' %}Resume{% else %}Pause{% endif %}</button></form>
+<form method="post" action="{{ url_for('monitor_duplicate', name=record.name) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-ghost" type="submit"><svg class="i i-sm" aria-hidden="true"><use href="#copy"/></svg>Duplicate</button></form>
+<button class="btn btn-ghost" type="button" data-open="del"><svg class="i i-sm" aria-hidden="true"><use href="#trash"/></svg>Delete</button>
+</div>
+</div>
+<section class="stats">
+<article class="stat"><small>Uptime 24 h</small><b>{{ uptime_24 }}</b></article>
+<article class="stat"><small>Uptime 7 d</small><b>{{ uptime_7 }}</b></article>
+<article class="stat"><small>Uptime 30 d</small><b>{{ uptime_30 }}</b></article>
+<article class="stat"><small>Latency p50</small><b id="c-p50">{{ average }}</b></article>
+<article class="stat"><small>Latency p95</small><b id="c-p95">{{ p95 }}</b></article>
+<article class="stat"><small>Today</small><b>{{ checks_today }}</b><small>{{ state_for }}</small></article>
 </section>
-<section class="panel">
-  <p class="kind">Recent uptime</p>
-  <p class="uptime-bar" aria-label="Uptime bar">{% for part in bar %}<i class="seg {% if part == 'empty' %}miss{% else %}{{ part }}{% endif %}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
-</section>
-<figure id="latency-chart">
-  <figcaption>Latency. The faint lines are p50 and p95. Red ticks are failures.</figcaption>
-  <div class="segmented" id="chart-range">
-    <button type="button" data-range="1">1 h</button>
-    <button type="button" data-range="24" aria-pressed="true">24 h</button>
-    <button type="button" data-range="168">7 d</button>
-    <button type="button" data-range="720">30 d</button>
-  </div>
-  <div id="chart-canvas">{{ chart }}</div>
-  <p id="chart-tip" class="help"></p>
-</figure>
+<section class="card">
+<div class="card-head"><h3>Response time</h3><div class="tabs" role="tablist"><button type="button" data-range="1h">1 h</button><button type="button" data-range="24h" aria-selected="true">24 h</button><button type="button" data-range="7d">7 d</button><button type="button" data-range="30d">30 d</button></div></div>
+<div style="position:relative">
+<svg class="chart" data-chart viewBox="0 0 1000 280" role="img" aria-label="Latency"></svg>
+<div class="tip"></div>
+</div>
 <script type="application/json" id="chart-data">{{ series|tojson }}</script>
-{% if results %}
-<table data-more>
-  <thead><tr><th>Checked</th><th>State</th><th>Latency</th><th>Message</th></tr></thead>
-  <tbody>
-    {% for row in results %}
-    <tr>
-      <td><time class="ago" datetime="{{ stamp(row.checked_at) }}">{{ clock(row.checked_at) }}</time></td>
-      <td>{% if row.message == "monitoring gap" %}<span class="pill unknown">no data</span>{% else %}<span class="pill {{ 'up' if row.ok else 'down' }}">{% if row.ok %}up{% else %}down{% endif %}</span>{% endif %}</td>
-      <td class="metric">{{ row.latency_ms|round|int }} ms</td>
-      <td>{{ row.message }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
+<div class="legend"><span>Latency</span><span>p50</span><span>p95</span><span>Grey is no data, not downtime</span></div>
+{% set ns = namespace(bar='') %}
+{% for part in bar %}<span class="sr">{% if part == 'up' %}{% set ns.bar = ns.bar ~ 'o' %}{% elif part == 'down' %}{% set ns.bar = ns.bar ~ 'x' %}{% else %}{% set ns.bar = ns.bar ~ 'g' %}{% endif %}</span>{% endfor %}
+<div class="card-pad"><div class="mon-up"><span>Last 90 checks</span><b>{{ uptime_24 }}</b></div><div class="bar" data-bar="{{ ns.bar }}"></div></div>
+</section>
+<section class="card">
+<div class="card-head"><h3>Recent results</h3></div>
+<table>
+<thead><tr><th>Time</th><th>Result</th><th>Status</th><th>Latency</th></tr></thead>
+<tbody>
+{% for row in results %}
+<tr>
+<td><time datetime="{{ stamp(row.checked_at) }}">{{ clock(row.checked_at) }}</time></td>
+<td><span class="pill {{ 'warn' if row.message == 'monitoring gap' else ('up' if row.ok else 'down') }}">{{ 'No data' if row.message == 'monitoring gap' else ('Up' if row.ok else 'Down') }}</span></td>
+<td>{{ 'No data' if row.message == 'monitoring gap' else row.message }}</td>
+<td class="metric">{% if row.message == 'monitoring gap' %}—{% else %}{{ row.latency_ms|round|int }} ms{% endif %}</td>
+</tr>
+{% else %}
+<tr><td colspan="4">No results yet.</td></tr>
+{% endfor %}
+</tbody>
 </table>
-{% else %}
-<p class="empty">No results yet.</p>
+</section>
+<section class="card card-pad">
+<div class="card-head"><h3>Configuration</h3><a class="btn btn-sm" href="{{ url_for('monitor_edit', name=record.name) }}">Edit</a></div>
+<dl class="kv">
+<dt>Kind</dt><dd>{{ record.kind }}</dd>
+<dt>Interval</dt><dd>{{ record.interval_seconds }} s</dd>
+<dt>State</dt><dd>{{ state }}</dd>
+{% if record.kind == 'heartbeat' %}
+<dt>Token</dt><dd><code>{{ record.target }}</code> <button class="btn btn-sm" type="button" data-copy="{{ record.target }}">Copy token</button></dd>
+<dt>Ping URL</dt><dd><code>{{ ping }}</code> <button class="btn btn-sm" type="button" data-copy="{{ ping }}">Copy ping URL</button></dd>
 {% endif %}
-<h2>Incidents</h2>
-{% if incidents %}
-<ul>
-  {% for row in incidents %}
-  <li><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.state }}</a> <time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time> {{ row.reason }}</li>
-  {% endfor %}
-</ul>
-{% else %}
-<p class="empty">No incidents for this monitor.</p>
+{% if record.kind == 'defacement' %}
+<dt>Baseline</dt><dd><a href="{{ url_for('monitor_edit', name=record.name) }}">Learn baseline</a></dd>
 {% endif %}
+</dl>
+</section>
+<div class="ov" id="del" role="dialog" aria-modal="true" aria-label="Delete monitor">
+<div class="dlg">
+<div class="dlg-b">
+<h2>Delete {{ record.name }}?</h2>
+<p>This removes the monitor and its history. Incidents and evidence stay for audit.</p>
+<div class="row-act">
+<button class="btn btn-ghost" type="button" data-close>Cancel</button>
+<form method="post" action="{{ url_for('monitor_delete', name=record.name) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-danger" type="submit">Delete monitor</button></form>
+</div>
+</div>
+</div>
+</div>
 {% endblock %}
