@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from markupsafe import Markup
 
@@ -169,6 +169,63 @@ def certificate_band(days: int | None) -> str:
     if days >= 8:
         return "warn"
     return "critical"
+
+
+def clock(value: object) -> str:
+    """Return a visible time with no ISO timestamp and no microseconds.
+
+    The browser replaces this with the local zone. The fallback stays in UTC.
+    """
+    moment = _moment(value)
+    if moment is None:
+        return "—"
+    moment = moment.astimezone(UTC)
+    hour = moment.hour % 12 or 12
+    suffix = "am" if moment.hour < 12 else "pm"
+    month = moment.strftime("%b")
+    return f"{moment.day} {month} {moment.year}, {hour}:{moment.minute:02d} {suffix} UTC"
+
+
+def stamp(value: object) -> str:
+    """Return an ISO timestamp for a machine attribute, or an empty string."""
+    moment = _moment(value)
+    if moment is None:
+        return ""
+    return moment.isoformat()
+
+
+def _moment(value: object) -> datetime | None:
+    """Parse a stored time. Blank and unreadable values stay empty."""
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=UTC)
+    return moment
+
+
+def hourly_counts(results: list[CheckResult], now: datetime, *, ok: bool) -> list[float]:
+    """Return eight counts across the last day, for a KPI sparkline."""
+    parts = 8
+    width = timedelta(hours=24) / parts
+    start = now - timedelta(hours=24)
+    values: list[float] = []
+    for index in range(parts):
+        begin = start + width * index
+        end = begin + width
+        bucket = [
+            item
+            for item in results
+            if begin <= item.checked_at < end and item.message != "monitoring gap"
+        ]
+        values.append(float(sum(1 for item in bucket if item.ok is ok)))
+    return values
 
 
 def sparkline(values: list[float]) -> Markup:

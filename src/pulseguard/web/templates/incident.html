@@ -8,32 +8,32 @@
 </p>
 <ol class="timeline">
   <li>
-    <time datetime="{{ row.started_at }}">{{ row.started_at }}</time>
+    <time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time>
     Detected. {{ row.reason }}
     <span class="help">{{ hint_for(row.reason) }}</span>
   </li>
   {% for item in alerts %}
   <li>
-    <time datetime="{{ item.created_at }}">{{ item.created_at }}</time>
+    <time class="when" datetime="{{ stamp(item.created_at) }}">{{ clock(item.created_at) }}</time>
     Alert {{ item.status }}. {% if item.error_text %}{{ item.error_text }}{% endif %}
   </li>
   {% endfor %}
   {% for item in results %}
   <li>
-    <time datetime="{{ item.checked_at.isoformat() }}">{{ item.checked_at }}</time>
+    <time class="when" datetime="{{ stamp(item.checked_at) }}">{{ clock(item.checked_at) }}</time>
     {% if item.ok %}A check succeeded.{% else %}Still failing.{% endif %}
     {{ item.message }}
     <span class="help">{{ hint_for(item.message) }}</span>
   </li>
   {% endfor %}
   {% if row.ended_at %}
-  <li><time datetime="{{ row.ended_at }}">{{ row.ended_at }}</time> Recovered.</li>
+  <li><time class="when" datetime="{{ stamp(row.ended_at) }}">{{ clock(row.ended_at) }}</time> Recovered.</li>
   {% endif %}
 </ol>
 <p class="note">{{ advice }}</p>
 <p>
   <a class="button" href="{{ url_for('incident_evidence', incident_id=row.id) }}">Download evidence pack</a>
-  <button type="button" data-copy="{{ row.monitor }} is {{ row.state }} since {{ row.started_at }}. {{ row.reason }}">Copy summary</button>
+  <button type="button" class="btn-secondary" data-copy="{{ row.monitor }} is {{ row.state }} since {{ row.started_at }}. {{ row.reason }}">Copy summary</button>
 </p>
 {% if results %}
 <table>
@@ -41,7 +41,7 @@
   <tbody>
     {% for item in results %}
     <tr>
-      <td><time datetime="{{ item.checked_at.isoformat() }}">{{ item.checked_at }}</time></td>
+      <td><time class="ago" datetime="{{ stamp(item.checked_at) }}">{{ clock(item.checked_at) }}</time></td>
       <td>{% if item.ok %}up{% else %}down{% endif %}</td>
       <td>{{ item.message }}</td>
     </tr>

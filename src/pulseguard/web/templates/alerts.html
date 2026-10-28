@@ -30,18 +30,18 @@
 </form>
 <form method="post" action="{{ url_for('alert_test') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit">Send test email</button>
+  <button type="submit" class="btn-secondary">Send test email</button>
 </form>
 <h2>Alert log</h2>
 {% if not log %}
 <p class="empty">No alerts yet. An alert is recorded even when mail is not configured.</p>
 {% else %}
-<table>
+<table data-more>
   <thead><tr><th>Time</th><th>Monitor</th><th>Kind</th><th>Recipient</th><th>Status</th><th>Error</th></tr></thead>
   <tbody>
     {% for row in log %}
     <tr>
-      <td>{{ row.created_at }}</td>
+      <td><time class="when" datetime="{{ stamp(row.created_at) }}">{{ clock(row.created_at) }}</time></td>
       <td>{{ row.monitor }}</td>
       <td>{{ row.kind }}</td>
       <td>{{ row.recipient }}</td>

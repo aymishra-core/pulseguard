@@ -12,7 +12,7 @@
       <header class="top">
         <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> {{ headline }}</p>
         <div class="spacer"></div>
-        <button type="button" class="btn-secondary" id="theme-toggle" aria-pressed="false">Theme</button>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Theme"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
         {% if serve %}
         <a href="{{ url_for('console_login') }}">Sign in</a>
         {% else %}
@@ -20,7 +20,7 @@
         {% endif %}
       </header>
       <p class="note">This page reads stored results. It does not contact the monitored targets.</p>
-      {% if updated %}<p>Last updated <time datetime="{{ updated }}">{{ updated }}</time></p>{% endif %}
+      {% if updated %}<p>Last updated <time class="ago" datetime="{{ updated }}">{{ clock(updated) }}</time></p>{% endif %}
       {% if not rows %}
       <p class="empty">No monitors yet.</p>
       {% else %}
@@ -34,7 +34,7 @@
           <span class="seg {{ label }}" data-tooltip="{% if label == 'gap' or label == 'empty' %}no data{% else %}{{ label }}{% endif %}"></span>
           {% endfor %}
         </div>
-        {% if row.checked_at %}<p>Checked <time datetime="{{ row.checked_at }}">{{ row.checked_at }}</time></p>{% endif %}
+        {% if row.checked_at %}<p>Checked <time class="ago" datetime="{{ row.checked_at }}">{{ clock(row.checked_at) }}</time></p>{% endif %}
       </article>
       {% endfor %}
       {% endif %}
@@ -44,7 +44,7 @@
       {% else %}
       <ul class="timeline">
         {% for item in history %}
-        <li>{{ item.title }} · <time datetime="{{ item.started }}">{{ item.started }}</time>{% if item.ended %} to <time datetime="{{ item.ended }}">{{ item.ended }}</time>{% endif %}</li>
+        <li>{{ item.title }} · <time class="when" datetime="{{ item.started }}">{{ clock(item.started) }}</time>{% if item.ended %} to <time class="when" datetime="{{ item.ended }}">{{ clock(item.ended) }}</time>{% endif %}</li>
         {% endfor %}
       </ul>
       {% endif %}

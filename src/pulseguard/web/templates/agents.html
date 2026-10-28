@@ -8,7 +8,7 @@
 {% if revealed %}
 <p>Token, shown once:</p>
 <code>{{ revealed }}</code>
-<button type="button" data-copy="{{ revealed }}">Copy token</button>
+<button type="button" class="btn-secondary" data-copy="{{ revealed }}">Copy token</button>
 {% elif has_token %}
 <p>A token is saved. Rotate it to see a new one.</p>
 {% else %}
@@ -16,7 +16,7 @@
 {% endif %}
 <form method="post" action="{{ url_for('agent_token') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-  <button type="submit">Generate or rotate token</button>
+  <button type="submit" class="btn-secondary">Generate or rotate token</button>
 </form>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -29,7 +29,7 @@
 </form>
 <h2>Push snippet</h2>
 <pre id="push-snippet">PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web</pre>
-<button type="button" data-copy="PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web">Copy snippet</button>
+<button type="button" class="btn-secondary" data-copy="PULSEGUARD_AGENT_TOKEN='paste-the-token' pulseguard push --host {{ host }} --port {{ port }} --name web">Copy snippet</button>
 <h2>Last seen</h2>
 {% if not seen %}
 <p class="empty">No agent has reported yet.</p>
@@ -38,7 +38,7 @@
   <thead><tr><th>Name</th><th>Last seen</th></tr></thead>
   <tbody>
     {% for name, when in seen %}
-    <tr><td>{{ name }}</td><td>{{ when }}</td></tr>
+    <tr><td>{{ name }}</td><td><time class="when" datetime="{{ stamp(when) }}">{{ clock(when) }}</time></td></tr>
     {% endfor %}
   </tbody>
 </table>

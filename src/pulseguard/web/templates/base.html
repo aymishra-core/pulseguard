@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
   </head>
   <body>
-    <svg xmlns="http://www.w3.org/2000/svg" hidden>
+    <svg class="sprite" xmlns="http://www.w3.org/2000/svg" hidden>
       <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
       <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3zM12 9v5M12 17h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -25,6 +25,9 @@
       <symbol id="i-heart" viewBox="0 0 24 24"><path d="M4 12h3l2-4 3 8 2-4h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-panel" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 5v14" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     </svg>
     <div class="shell" id="shell">
       <nav class="nav" aria-label="Sections">
@@ -41,7 +44,7 @@
         <a href="{{ url_for('help_page') }}"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="label">Help</span></a>
         <a href="{{ url_for('public_status') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="label">Public status</span></a>
         <div class="nav-tools">
-          <button type="button" class="btn-secondary" id="nav-collapse" aria-pressed="false">Collapse sidebar</button>
+          <button type="button" class="icon-btn" id="nav-collapse" aria-pressed="false" aria-label="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg></button>
         </div>
       </nav>
       <div class="main">
@@ -49,7 +52,7 @@
           <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> <span id="headline">{{ headline }}</span></p>
           <p class="crumb">{% block crumb %}{% endblock %}</p>
           <div class="spacer"></div>
-          <button type="button" class="btn-secondary" id="theme-toggle" aria-pressed="false">Theme</button>
+          <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Theme"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg></button>
           <button type="button" class="btn-secondary" id="palette-open">Search <kbd>Ctrl</kbd><kbd>K</kbd></button>
           <p class="who">Signed in as <strong>{{ user }}</strong></p>
           <form method="post" action="{{ url_for('console_logout') }}">

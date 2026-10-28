@@ -3,7 +3,7 @@
 {% block crumb %}{{ record.name }}{% endblock %}
 {% block body %}
 <header class="hero">
-  <div class="ring {{ state }}" aria-hidden="true"></div>
+  <div class="ring {{ state }}" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="{% if state == 'down' %}#i-alert{% elif state == 'paused' %}#i-pause{% else %}#i-check{% endif %}"/></svg></div>
   <div>
     <h1>{{ record.name }}</h1>
     <p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }} · {{ state_for }}</p>
@@ -58,18 +58,29 @@
   <article class="stat"><h2>p95</h2><p>{{ p95 }}</p></article>
   <article class="stat"><h2>Checks today</h2><p class="metric">{{ checks_today }}</p></article>
 </section>
-<p class="uptime-bar" aria-label="Uptime bar">{% for part in bar %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
-<figure>
-  <figcaption>Latency for the last 100 checks. Failures stay in the table below.</figcaption>
-  {{ chart }}
+<section class="panel">
+  <p class="kind">Recent uptime</p>
+  <p class="uptime-bar" aria-label="Uptime bar">{% for part in bar %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
+</section>
+<figure id="latency-chart">
+  <figcaption>Latency. The faint lines are p50 and p95. Red ticks are failures.</figcaption>
+  <div class="segmented" id="chart-range">
+    <button type="button" data-range="1">1 h</button>
+    <button type="button" data-range="24" aria-pressed="true">24 h</button>
+    <button type="button" data-range="168">7 d</button>
+    <button type="button" data-range="720">30 d</button>
+  </div>
+  <div id="chart-canvas">{{ chart }}</div>
+  <p id="chart-tip" class="help"></p>
 </figure>
+<script type="application/json" id="chart-data">{{ series|tojson }}</script>
 {% if results %}
-<table>
+<table data-more>
   <thead><tr><th>Checked</th><th>State</th><th>Latency</th><th>Message</th></tr></thead>
   <tbody>
     {% for row in results %}
     <tr>
-      <td><time datetime="{{ row.checked_at.isoformat() }}">{{ row.checked_at.strftime("%Y-%m-%d %H:%M") }} UTC</time></td>
+      <td><time class="ago" datetime="{{ stamp(row.checked_at) }}">{{ clock(row.checked_at) }}</time></td>
       <td>{% if row.message == "monitoring gap" %}<span class="pill unknown">no data</span>{% else %}<span class="pill {{ 'up' if row.ok else 'down' }}">{% if row.ok %}up{% else %}down{% endif %}</span>{% endif %}</td>
       <td class="metric">{{ row.latency_ms|round|int }} ms</td>
       <td>{{ row.message }}</td>
@@ -84,7 +95,7 @@
 {% if incidents %}
 <ul>
   {% for row in incidents %}
-  <li><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.state }} {{ row.started_at }}</a> {{ row.reason }}</li>
+  <li><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.state }}</a> <time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time> {{ row.reason }}</li>
   {% endfor %}
 </ul>
 {% else %}

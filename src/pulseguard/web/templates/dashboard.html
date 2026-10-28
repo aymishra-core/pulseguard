@@ -3,61 +3,74 @@
 {% block crumb %}Dashboard{% endblock %}
 {% block body %}
 <section class="hero" id="hero" aria-live="polite">
-  <div class="ring {{ dot }}" id="hero-ring" aria-hidden="true"></div>
+  <div class="ring {{ dot }}" id="hero-ring">
+    <svg class="icon" aria-hidden="true"><use href="{% if dot == 'down' %}#i-alert{% elif dot == 'paused' %}#i-pause{% else %}#i-check{% endif %}"/></svg>
+  </div>
   <div>
     {% if open_incidents %}
-    <h1 id="hero-title">{{ open_incidents }} incident{% if open_incidents != 1 %}s{% endif %} ongoing{% if incident_since %} since {{ incident_since }}{% endif %}</h1>
-    <p>Open the incident to see what failed and what to check. A monitor that is down is not always an incident yet.</p>
+    <h1 id="hero-title"><a href="{% if open_incidents == 1 %}{{ url_for('incident_detail', incident_id=incident_id) }}{% else %}{{ url_for('incident_list') }}{% endif %}">{{ open_incidents }} incident{% if open_incidents != 1 %}s{% endif %} ongoing{% if incident_since %} for <span data-tick="{{ stamp(incident_since) }}" title="{{ clock(incident_since) }}">{{ duration(incident_since, '') }}</span>{% endif %}</a></h1>
+    <p>Open the incident to see what failed and what to check.</p>
     {% elif dot == "up" %}
     <h1 id="hero-title">All systems operational</h1>
     <p>Every enabled monitor answered its last check.</p>
     {% elif dot == "down" %}
     <h1 id="hero-title">{{ headline }}</h1>
-    <p>Look at the red cards first. Run a check now if you just changed something.</p>
+    <p>Look at the down cards first. Run a check now if you just changed something.</p>
     {% else %}
     <h1 id="hero-title">{{ headline }}</h1>
     <p>Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.</p>
     {% endif %}
   </div>
 </section>
-<section class="panel" id="onboarding">
-  <h2>First steps</h2>
-  <ol>
-    <li>Create account — done</li>
-    <li>{% if empty %}Add your first monitor{% else %}Add a monitor — done{% endif %}</li>
-    <li><a href="{{ url_for('alerts') }}">Set up alerts</a></li>
-    <li><a href="{{ url_for('monitor_new') }}">Add a heartbeat</a> and copy its token into the job that should ping you</li>
+{% set step_monitor = 1 if not empty else 0 %}
+{% set step_alerts = 1 if alerts_ready else 0 %}
+{% set step_heart = 1 if has_heartbeat else 0 %}
+{% set step_done = 1 + step_monitor + step_alerts + step_heart %}
+<section class="steps-card" id="onboarding" {% if step_done == 4 %}hidden{% endif %}>
+  <div>
+    <p class="kind">First steps</p>
+    <meter min="0" max="4" value="{{ step_done }}" aria-label="Setup progress">{{ step_done }} of 4</meter>
+  </div>
+  <ol class="step-row">
+    <li class="done"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Account created</li>
+    <li class="{% if not empty %}done{% endif %}">{% if not empty %}<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Monitor added{% else %}<a href="{{ url_for('monitor_new') }}">Add your first monitor</a>{% endif %}</li>
+    <li class="{% if alerts_ready %}done{% endif %}">{% if alerts_ready %}<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Alerts ready{% else %}<a href="{{ url_for('alerts') }}">Set up alerts</a>{% endif %}</li>
+    <li class="{% if has_heartbeat %}done{% endif %}">{% if has_heartbeat %}<svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Heartbeat sent{% else %}<a href="{{ url_for('monitor_new') }}">Add a heartbeat</a>{% endif %}</li>
   </ol>
-  <button type="button" id="hide-onboarding" class="btn-secondary">Hide checklist</button>
+  <button type="button" id="hide-onboarding" class="icon-btn" aria-label="Hide checklist">×</button>
 </section>
 <section class="summary" aria-label="Summary">
-  <article class="stat"><h2>Up</h2><p class="metric">{{ counts.up }}</p></article>
-  <article class="stat"><h2>Down</h2><p class="metric">{{ counts.down }}</p></article>
-  <article class="stat"><h2>Unknown</h2><p class="metric">{{ counts.unknown }}</p></article>
-  <article class="stat"><h2>Open incidents</h2><p class="metric">{{ open_incidents }}</p></article>
-  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric">{{ certs }}</p></article>
-  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p></article>
+  <article class="stat"><h2>Up</h2><p class="metric" data-count="{{ counts.up }}">{{ counts.up }}</p>{{ sparkline(trend_up) }}</article>
+  <article class="stat"><h2>Down</h2><p class="metric" data-count="{{ counts.down }}">{{ counts.down }}</p>{{ sparkline(trend_down) }}</article>
+  <article class="stat"><h2>Unknown</h2><p class="metric" data-count="{{ counts.unknown }}">{{ counts.unknown }}</p></article>
+  <article class="stat"><h2>Open incidents</h2><p class="metric" data-count="{{ open_incidents }}">{{ open_incidents }}</p></article>
+  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric" data-count="{{ certs }}">{{ certs }}</p></article>
+  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p>{{ sparkline(trend_uptime) }}</article>
 </section>
 <p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
 <div class="filters">
-  <label for="filter-kind">Kind</label>
+  <label for="filter-kind">Kind
   <select id="filter-kind">
     <option value="">All kinds</option>
     <option>http</option><option>keyword</option><option>defacement</option>
     <option>tcp</option><option>dns</option><option>tls</option><option>heartbeat</option>
   </select>
-  <label for="filter-state">State</label>
+  </label>
+  <label for="filter-state">State
   <select id="filter-state">
     <option value="">All states</option>
     <option>up</option><option>down</option><option>unknown</option><option>paused</option>
   </select>
-  <label for="filter-sort">Sort</label>
+  </label>
+  <label for="filter-sort">Sort
   <select id="filter-sort">
     <option value="name">Name</option>
     <option value="state">State</option>
   </select>
-  <label for="filter-query">Search</label>
+  </label>
+  <label for="filter-query">Search
   <input id="filter-query" type="search" placeholder="Name" />
+  </label>
 </div>
 {% if empty %}
 <section class="empty">
@@ -74,7 +87,7 @@
       <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
       <p><span class="pill {{ card.state }}">{{ card.state }}</span></p>
       <p>{{ card.plain }}</p>
-      <p class="muted"><time datetime="{{ card.checked_at }}">{{ card.checked or "not checked" }}</time></p>
+      <p class="muted"><time class="ago" datetime="{{ card.checked_at }}">{{ card.checked }}</time></p>
       <p class="muted next-check">Next check soon</p>
       <p class="uptime-bar" aria-label="24 hour uptime bar">{% for part in card.segments %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
       <p>24 h uptime {{ card.uptime }}</p>
@@ -90,7 +103,7 @@
     <h2>Activity</h2>
     <ul id="activity">
       {% for event in activity %}
-      <li><span class="pill {{ event.state }}">{{ event.state }}</span> <time datetime="{{ event.at }}">{{ event.at }}</time> {{ event.text }}</li>
+      <li><span class="pill {{ event.state }}">{{ event.state }}</span> <time class="when" datetime="{{ event.at }}">{{ clock(event.at) }}</time> {{ event.text }}</li>
       {% else %}
       <li>No changes yet.</li>
       {% endfor %}

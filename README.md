@@ -26,7 +26,7 @@ On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**.
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.2.0 is the browser console redesign. The type is a system sans, light and dark follow the system until you toggle them, and a quiet period longer than three intervals is shown as no data instead of a false outage. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.2.1 keeps the browser console on one design system. Times are local, the latency chart can switch range, and the command palette can run every check. The type is a system sans, light and dark follow the system until you toggle them, and a quiet period longer than three intervals is shown as no data instead of a false outage. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -177,7 +177,7 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, `docs/design-system.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.2.0 tag notes.
+`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, `docs/design-system.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.2.1 tag notes.
 
 ## Container
 

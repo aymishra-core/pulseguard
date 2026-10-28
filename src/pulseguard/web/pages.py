@@ -57,14 +57,17 @@ from pulseguard.web.auth import (
 from pulseguard.web.board import (
     activity_lines,
     certificate_band,
+    clock,
     days_remaining,
     hint_for,
+    hourly_counts,
     latency_chart,
     latest_by_name,
     monitor_state,
     plain_message,
     segments,
     sparkline,
+    stamp,
     uptime,
     window,
 )
@@ -117,6 +120,24 @@ def register_pages(app: Flask) -> None:
     @app.route("/monitors/new", methods=["GET", "POST"])
     def monitor_new() -> str | RedirectResponse | tuple[str, int]:
         return _monitor_form(None)
+
+    @app.post("/monitors/run")
+    def monitor_run_all() -> str | RedirectResponse | tuple[str, int]:
+        """Run every enabled monitor once. Login and CSRF are required."""
+        denied = _guard()
+        if denied is not None:
+            return denied
+        with _repository() as repo:
+            names = [record.name for record in repo.monitors() if record.enabled]
+        ran = 0
+        for name in names:
+            try:
+                _run_check(name)
+            except PulseGuardError:
+                continue
+            ran += 1
+        _flash(f"Ran {ran} checks")
+        return redirect(url_for("dashboard"))
 
     @app.post("/monitors/probe")
     def monitor_probe() -> (
@@ -189,6 +210,12 @@ def register_pages(app: Flask) -> None:
             state_for=_state_span(results, now),
             bar=segments(results, now),
             ping=_ping_line(record, options),
+            series=[
+                [stamp(row.checked_at), round(row.latency_ms), bool(row.ok)]
+                for row in results[-400:]
+                if row.message != "monitoring gap"
+            ],
+            failures=[stamp(row.checked_at) for row in results[-400:] if not row.ok],
         )
 
     @app.post("/monitors/<name>/pause")
@@ -645,6 +672,9 @@ def register_pages(app: Flask) -> None:
 
     app.add_template_global(_duration, name="duration")
     app.add_template_global(hint_for, name="hint_for")
+    app.add_template_global(clock, name="clock")
+    app.add_template_global(stamp, name="stamp")
+    app.add_template_global(sparkline, name="sparkline")
 
 
 def _monitor_form(name: str | None) -> str | RedirectResponse | tuple[str, int]:
@@ -873,7 +903,7 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
                 "plain": plain_message(raw)
                 if raw
                 else "No results yet. The first check has not run.",
-                "checked": "" if checked_at is None else checked_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "checked": clock(checked_at),
                 "checked_at": "" if checked_at is None else checked_at.isoformat(),
                 "interval": record.interval_seconds,
                 "uptime": _pct(uptime(recent)),
@@ -885,13 +915,24 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
     day = window(results, now, 24)
     open_rows = repo.incidents(state="open")
     since = ""
+    incident_id = 0
     if open_rows:
-        since = min(row.started_at for row in open_rows)
+        earliest = min(open_rows, key=lambda row: row.started_at)
+        since = earliest.started_at
+        incident_id = earliest.id
+    alerts_ready = bool((repo.get_setting("smtp_host") or "").strip())
+    has_heartbeat = any(record.kind == "heartbeat" for record in records)
     return {
         "cards": cards,
         "counts": counts,
         "open_incidents": len(open_rows),
+        "incident_id": incident_id,
         "incident_since": since,
+        "alerts_ready": alerts_ready,
+        "has_heartbeat": has_heartbeat,
+        "trend_up": hourly_counts(results, now, ok=True),
+        "trend_down": hourly_counts(results, now, ok=False),
+        "trend_uptime": hourly_counts(results, now, ok=True),
         "certs": certs,
         "uptime": _pct(uptime(day)),
         "empty": not records,
@@ -909,6 +950,7 @@ def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
     return {
         "counts": body["counts"],
         "open_incidents": body["open_incidents"],
+        "incident_id": body.get("incident_id", 0),
         "incident_since": body.get("incident_since", ""),
         "certs": body["certs"],
         "uptime": body["uptime"],

@@ -10,7 +10,7 @@
 {% if not rows %}
 <p class="empty">No {{ tab }} incidents.</p>
 {% else %}
-<table>
+<table data-more>
   <thead>
     <tr><th>Monitor</th><th>Started</th><th>Ended</th><th>Duration</th><th>Cause</th></tr>
   </thead>
@@ -18,8 +18,8 @@
     {% for row in rows %}
     <tr>
       <td><a href="{{ url_for('incident_detail', incident_id=row.id) }}">{{ row.monitor }}</a></td>
-      <td><time datetime="{{ row.started_at }}">{{ row.started_at }}</time></td>
-      <td>{% if row.ended_at %}<time datetime="{{ row.ended_at }}">{{ row.ended_at }}</time>{% else %}—{% endif %}</td>
+      <td><time class="when" datetime="{{ stamp(row.started_at) }}">{{ clock(row.started_at) }}</time></td>
+      <td>{% if row.ended_at %}<time class="when" datetime="{{ stamp(row.ended_at) }}">{{ clock(row.ended_at) }}</time>{% else %}—{% endif %}</td>
       <td {% if tab == 'open' %}data-tick="{{ row.started_at }}"{% endif %}>{{ duration(row.started_at, row.ended_at) }}</td>
       <td>{{ row.cause or row.reason }}</td>
     </tr>

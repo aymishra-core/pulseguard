@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 - 2026-10-28
+
+Visible times use one server helper and one browser helper. A person sees "Today 11:05", "yesterday 7:28 pm", "12 s ago", or "21h 3m", with the exact local time on the tooltip. Machine-readable values stay on `<time datetime>`. Latency is a whole number of milliseconds.
+
+- The dashboard hero shows a check, warning, or pause icon, and links the open incident with how long it has run.
+- First steps is a slim progress card. It hides when the account, a monitor, alerts, and a heartbeat are done.
+- The monitor chart has 1 h, 24 h, 7 d, and 30 d ranges, a hover readout, p50 and p95 guides, and failure ticks. KPI counts ease in, and the up, down, and uptime tiles draw a sparkline.
+- Add monitor hides the later steps until Next. Tables with more than 12 rows offer Load more. The command palette can run every enabled check through `POST /monitors/run`.
+- The logo is not a nav item. The sidebar collapses from an icon and remembers that choice. The theme control is an icon, including on login, setup, and the error pages.
+- `home.html` is styled with the same system. No route renders it.
+
 ## 1.2.0 - 2026-10-27
 
 The browser console uses one design system: semantic colours, a 4 px spacing scale, light and dark themes, and a sidebar shell. Times are shown in the browser's local zone. A gap longer than three intervals is stored as "no data", left out of uptime, and the first failure after it is not an outage trigger.

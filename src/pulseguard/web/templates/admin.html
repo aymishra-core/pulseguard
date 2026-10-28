@@ -2,50 +2,63 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PulseGuard admin</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon-unknown.svg') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
   </head>
   <body>
-    <h1>Admin</h1>
-    <p class="note">Catalog targets stay on this page. The public status page does not show them.</p>
-    <form method="post" action="{{ url_for('logout') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <button type="submit">Log out</button>
-    </form>
-    {% if not monitors %}
-    <p>no monitors in the catalog</p>
-    {% endif %}
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Kind</th>
-          <th>Target</th>
-          <th>Interval</th>
-          <th>Enabled</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in monitors %}
-        <tr>
-          <td>{{ record.name }}</td>
-          <td>{{ record.kind }}</td>
-          <td>{{ record.target }}</td>
-          <td>{{ record.interval_seconds }}</td>
-          <td>
-            <form method="post" action="{{ url_for('admin_update') }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <input type="hidden" name="name" value="{{ record.name }}" />
-              <select name="enabled">
-                <option value="true" {% if record.enabled %}selected{% endif %}>true</option>
-                <option value="false" {% if not record.enabled %}selected{% endif %}>false</option>
-              </select>
-              <button type="submit">Save</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <button type="button" class="icon-btn theme-corner" id="theme-toggle" aria-label="Theme"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <main class="public">
+      <header class="page-head">
+        <div>
+          <p class="kind">PulseGuard</p>
+          <h1>Admin</h1>
+        </div>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit" class="btn-secondary">Log out</button>
+        </form>
+      </header>
+      <p class="note">Catalog targets stay on this page. The public status page does not show them.</p>
+      {% if not monitors %}
+      <p class="empty">no monitors in the catalog</p>
+      {% else %}
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Kind</th>
+            <th>Target</th>
+            <th>Interval</th>
+            <th>Enabled</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in monitors %}
+          <tr>
+            <td>{{ record.name }}</td>
+            <td>{{ record.kind }}</td>
+            <td>{{ record.target }}</td>
+            <td class="metric">{{ record.interval_seconds }}s</td>
+            <td>
+              <form method="post" action="{{ url_for('admin_update') }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="hidden" name="name" value="{{ record.name }}" />
+                <label class="sr" for="enabled-{{ record.name }}">Enabled</label>
+                <select id="enabled-{{ record.name }}" name="enabled">
+                  <option value="true" {% if record.enabled %}selected{% endif %}>true</option>
+                  <option value="false" {% if not record.enabled %}selected{% endif %}>false</option>
+                </select>
+                <button type="submit" class="btn-secondary">Save</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

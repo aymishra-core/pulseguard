@@ -2,10 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PulseGuard status</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon-paused.svg') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='status.css') }}" />
   </head>
   <body>
-    <p class="note">The public status page is turned off.</p>
+    <button type="button" class="icon-btn theme-corner" id="theme-toggle" aria-label="Theme"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <main class="panel auth">
+      <p class="kind">PulseGuard</p>
+      <h1>Status page is off</h1>
+      <p class="note">The public status page is turned off.</p>
+      <p class="help">An operator can turn it back on from Settings.</p>
+    </main>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
 </html>

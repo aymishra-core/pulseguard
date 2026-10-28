@@ -13,7 +13,7 @@
     var current = root.getAttribute("data-theme");
     if (!current) current = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     if (themeButton) {
-      themeButton.textContent = current === "dark" ? "Light theme" : "Dark theme";
+      themeButton.setAttribute("aria-label", current === "dark" ? "Light theme" : "Dark theme");
       themeButton.setAttribute("aria-pressed", current === "dark" ? "true" : "false");
     }
   }
@@ -48,7 +48,7 @@
     });
   }
   var path = location.pathname;
-  document.querySelectorAll(".nav a").forEach(function (link) {
+  document.querySelectorAll(".nav a:not(.brand)").forEach(function (link) {
     if (link.getAttribute("href") === path) link.setAttribute("aria-current", "page");
   });
   var palette = document.querySelector("#palette");
@@ -67,7 +67,8 @@
     ["Data", "/data"],
     ["Settings", "/settings"],
     ["Help", "/help"],
-    ["Public status", "/status"]
+    ["Public status", "/status"],
+    ["Run all checks now", "/monitors/run", "run"]
   ];
   var namesNode = document.querySelector("#nav-monitors");
   var monitorNames = [];
@@ -76,7 +77,7 @@
   }
   function paletteItems(query) {
     var needle = (query || "").toLowerCase();
-    var items = pages.map(function (row) { return { label: row[0], href: row[1] }; });
+    var items = pages.map(function (row) { return { label: row[0], href: row[1], action: row[2] || "" }; });
     monitorNames.forEach(function (name) {
       items.push({ label: "Monitor " + name, href: "/monitors/" + encodeURIComponent(name) + "/view" });
     });
@@ -95,7 +96,23 @@
       button.textContent = item.label;
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", index === paletteIndex ? "true" : "false");
-      button.addEventListener("click", function () { location.href = item.href; });
+      button.addEventListener("click", function () {
+        if (item.action === "run") {
+          var token = document.querySelector("input[name=csrf_token]");
+          var form = document.createElement("form");
+          form.method = "post";
+          form.action = item.href;
+          var field = document.createElement("input");
+          field.type = "hidden";
+          field.name = "csrf_token";
+          field.value = token ? token.value : "";
+          form.appendChild(field);
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
+        location.href = item.href;
+      });
       li.appendChild(button);
       paletteList.appendChild(li);
     });
@@ -244,6 +261,7 @@
   }
   var checklist = document.querySelector("#onboarding");
   if (checklist && readStore("pulseguard-onboarding") === "hide") checklist.hidden = true;
+  if (checklist && readStore("pulseguard-onboarding") === "show") checklist.hidden = false;
   var hideChecklist = document.querySelector("#hide-onboarding");
   if (hideChecklist && checklist) {
     hideChecklist.addEventListener("click", function () {
@@ -346,11 +364,27 @@
     var date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
     var seconds = Math.round((Date.now() - date.getTime()) / 1000);
-    var text = date.toLocaleString();
-    if (seconds < 60) return seconds + " s ago";
+    if (seconds < 60) return Math.max(0, seconds) + " s ago";
     if (seconds < 3600) return Math.round(seconds / 60) + " m ago";
     if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
-    return text;
+    return friendlyTime(value);
+  }
+  function friendlyTime(value) {
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    var now = new Date();
+    var time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    var apart = Math.round((today.getTime() - day.getTime()) / 86400000);
+    if (apart === 0) return "Today " + time;
+    if (apart === 1) return "yesterday " + time;
+    return date.toLocaleDateString([], { day: "numeric", month: "short" }) + " " + time;
+  }
+  function exactTime(value) {
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString();
   }
   function paintTicks() {
     document.querySelectorAll("[data-tick]").forEach(function (node) {
@@ -370,8 +404,9 @@
     document.querySelectorAll("time[datetime]").forEach(function (node) {
       var exact = new Date(node.getAttribute("datetime"));
       if (Number.isNaN(exact.getTime())) return;
-      node.textContent = localTime(node.getAttribute("datetime"));
-      node.setAttribute("title", exact.toLocaleString());
+      var raw = node.getAttribute("datetime");
+      node.textContent = node.classList.contains("ago") ? localTime(raw) : friendlyTime(raw);
+      node.setAttribute("title", exactTime(raw));
     });
     var zone = document.querySelector("#zone");
     if (zone) {
@@ -392,6 +427,158 @@
   paintTimes();
   paintTicks();
   setInterval(function () { paintTimes(); paintTicks(); }, 1000);
+  document.querySelectorAll("[data-count]").forEach(function (node) {
+    var target = Number(node.getAttribute("data-count"));
+    if (!Number.isFinite(target)) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var begun = performance.now();
+    function frame(now) {
+      var t = Math.min(1, (now - begun) / 400);
+      node.textContent = String(Math.round(target * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+  var stepPanels = document.querySelectorAll("[data-step]");
+  var stepIndex = 1;
+  function fillReview() {
+    var box = document.querySelector("#review");
+    var kindField = document.querySelector("#kind");
+    var nameField = document.querySelector("#name");
+    var targetField = document.querySelector("#target");
+    if (!box) return;
+    box.textContent = "";
+    [ "Kind: " + (kindField ? kindField.value : ""), "Name: " + (nameField ? nameField.value : ""), "Target: " + (targetField ? targetField.value : "") ].forEach(function (line) {
+      var row = document.createElement("p");
+      row.textContent = line;
+      box.appendChild(row);
+    });
+  }
+  function showStep(next) {
+    stepIndex = next;
+    stepPanels.forEach(function (panel) {
+      panel.hidden = Number(panel.getAttribute("data-step")) !== stepIndex;
+    });
+    document.querySelectorAll("[data-step-tab]").forEach(function (tab) {
+      tab.classList.toggle("on", Number(tab.getAttribute("data-step-tab")) === stepIndex);
+    });
+    var back = document.querySelector("#step-back");
+    var forward = document.querySelector("#step-next");
+    var save = document.querySelector("#save-monitor");
+    if (back) back.hidden = stepIndex === 1;
+    if (forward) forward.hidden = stepIndex === 3;
+    if (save) save.hidden = stepIndex !== 3;
+    if (stepIndex === 3) fillReview();
+  }
+  if (stepPanels.length) {
+    showStep(1);
+    var backBtn = document.querySelector("#step-back");
+    var nextBtn = document.querySelector("#step-next");
+    if (backBtn) backBtn.addEventListener("click", function () { showStep(Math.max(1, stepIndex - 1)); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { showStep(Math.min(3, stepIndex + 1)); });
+    document.querySelectorAll("[data-step-tab]").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        showStep(Number(tab.getAttribute("data-step-tab")) || 1);
+      });
+    });
+  }
+  document.querySelectorAll("table[data-more]").forEach(function (table) {
+    var rows = table.querySelectorAll("tbody tr");
+    var shown = 12;
+    if (rows.length <= shown) return;
+    function paintRows() {
+      rows.forEach(function (row, index) { row.hidden = index >= shown; });
+    }
+    paintRows();
+    var more = document.createElement("button");
+    more.type = "button";
+    more.className = "btn-secondary";
+    more.textContent = "Load more";
+    more.addEventListener("click", function () {
+      shown += 12;
+      paintRows();
+      if (shown >= rows.length) more.hidden = true;
+    });
+    table.insertAdjacentElement("afterend", more);
+  });
+  var chartNode = document.querySelector("#chart-data");
+  var chartCanvas = document.querySelector("#chart-canvas");
+  if (chartNode && chartCanvas) {
+    var samples = [];
+    try { samples = JSON.parse(chartNode.textContent || "[]"); } catch (err) { samples = []; }
+    function quantile(values, q) {
+      if (!values.length) return 0;
+      var sorted = values.slice().sort(function (a, b) { return a - b; });
+      var index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1));
+      return sorted[index];
+    }
+    function drawChart(hours) {
+      var cutoff = Date.now() - hours * 3600000;
+      var rows = samples.filter(function (row) { return new Date(row[0]).getTime() >= cutoff; });
+      if (rows.length < 2) rows = samples.slice(-Math.min(samples.length, 24));
+      var width = 640;
+      var height = 160;
+      var values = rows.map(function (row) { return Number(row[1]) || 0; });
+      var low = Math.min.apply(null, values.concat([0]));
+      var high = Math.max.apply(null, values.concat([low + 1]));
+      var svgNs = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(svgNs, "svg");
+      svg.setAttribute("class", "spark chart");
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", "latency");
+      function yOf(value) {
+        return (height - ((value - low) / (high - low)) * (height - 28) - 14).toFixed(1);
+      }
+      [0.5, 0.95].forEach(function (q) {
+        var guide = document.createElementNS(svgNs, "line");
+        var y = yOf(quantile(values, q));
+        guide.setAttribute("x1", "0");
+        guide.setAttribute("x2", String(width));
+        guide.setAttribute("y1", y);
+        guide.setAttribute("y2", y);
+        guide.setAttribute("class", q === 0.5 ? "p50" : "p95");
+        svg.appendChild(guide);
+      });
+      var coords = rows.map(function (row, index) {
+        var x = rows.length === 1 ? 0 : (index * width / (rows.length - 1)).toFixed(1);
+        return x + "," + yOf(Number(row[1]) || 0);
+      }).join(" ");
+      var line = document.createElementNS(svgNs, "polyline");
+      line.setAttribute("fill", "none");
+      line.setAttribute("points", coords);
+      svg.appendChild(line);
+      rows.forEach(function (row, index) {
+        if (row[2]) return;
+        var tick = document.createElementNS(svgNs, "line");
+        var x = rows.length === 1 ? 0 : index * width / (rows.length - 1);
+        tick.setAttribute("x1", x.toFixed(1));
+        tick.setAttribute("x2", x.toFixed(1));
+        tick.setAttribute("y1", String(height - 4));
+        tick.setAttribute("y2", String(height));
+        tick.setAttribute("class", "fail");
+        svg.appendChild(tick);
+      });
+      chartCanvas.textContent = "";
+      chartCanvas.appendChild(svg);
+      svg.addEventListener("mousemove", function (event) {
+        var bounds = svg.getBoundingClientRect();
+        var ratio = bounds.width ? (event.clientX - bounds.left) / bounds.width : 0;
+        var index = Math.max(0, Math.min(rows.length - 1, Math.round(ratio * (rows.length - 1))));
+        var tip = document.querySelector("#chart-tip");
+        if (tip) tip.textContent = Math.round(Number(rows[index][1]) || 0) + " ms · " + exactTime(rows[index][0]);
+      });
+    }
+    document.querySelectorAll("#chart-range button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll("#chart-range button").forEach(function (other) {
+          other.setAttribute("aria-pressed", other === button ? "true" : "false");
+        });
+        drawChart(Number(button.getAttribute("data-range")) || 24);
+      });
+    });
+    if (samples.length) drawChart(24);
+  }
   document.querySelectorAll("[data-pick-kind]").forEach(function (button) {
     button.addEventListener("click", function () {
       var select = document.querySelector("#kind");
@@ -481,11 +668,26 @@
     var title = document.querySelector("#hero-title");
     if (headline) headline.textContent = line;
     if (pill) { pill.className = "pill " + dot; pill.textContent = dot; }
-    if (ring) ring.className = "ring " + dot;
+    if (ring) {
+      ring.className = "ring " + dot;
+      var glyph = ring.querySelector("use");
+      var iconName = dot === "down" ? "#i-alert" : (dot === "paused" ? "#i-pause" : "#i-check");
+      if (glyph) glyph.setAttribute("href", iconName);
+    }
     if (title) {
-      title.textContent = open
-        ? open + (open === 1 ? " incident ongoing" : " incidents ongoing")
-        : line;
+      title.textContent = "";
+      if (open) {
+        var incidentLink = document.createElement("a");
+        incidentLink.href = open === 1 && body.incident_id ? "/incidents/" + body.incident_id : "/incidents";
+        incidentLink.appendChild(document.createTextNode(open + (open === 1 ? " incident ongoing for " : " incidents ongoing for ")));
+        var tick = document.createElement("span");
+        if (body.incident_since) tick.setAttribute("data-tick", body.incident_since);
+        incidentLink.appendChild(tick);
+        title.appendChild(incidentLink);
+        paintTicks();
+      } else {
+        title.textContent = line;
+      }
       if (title.nextElementSibling) {
         title.nextElementSibling.textContent = open
           ? "Open the incident to see what failed and what to check."
