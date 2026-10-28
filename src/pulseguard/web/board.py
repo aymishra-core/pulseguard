@@ -85,27 +85,45 @@ def plain_message(message: str) -> str:
     return text
 
 
-def segments(
+def segment_rows(
     results: list[CheckResult], now: datetime, *, hours: int = 24, parts: int = 90
-) -> list[str]:
-    """Return up, down, gap, or empty for each slice of the window."""
+) -> list[dict[str, object]]:
+    """Return one bucket per slice, including the latest real check in that slice."""
     width = timedelta(hours=hours) / parts
     start = now - timedelta(hours=hours)
-    labels: list[str] = []
+    rows: list[dict[str, object]] = []
     for index in range(parts):
         begin = start + width * index
         end = begin + width
         bucket = [item for item in results if begin <= item.checked_at < end]
         useful = [item for item in bucket if item.message != "monitoring gap"]
         if any(item.message == "monitoring gap" for item in bucket) and not useful:
-            labels.append("gap")
+            mark = "gap"
         elif any(not item.ok for item in useful):
-            labels.append("down")
+            mark = "down"
         elif useful:
-            labels.append("up")
+            mark = "up"
         else:
-            labels.append("empty")
-    return labels
+            mark = "empty"
+        latest = useful[-1] if useful else None
+        rows.append(
+            {
+                "mark": mark,
+                "start": begin.isoformat(),
+                "end": end.isoformat(),
+                "at": "" if latest is None else latest.checked_at.isoformat(),
+                "latency": None if latest is None else round(latest.latency_ms),
+                "message": "" if latest is None else latest.message,
+            }
+        )
+    return rows
+
+
+def segments(
+    results: list[CheckResult], now: datetime, *, hours: int = 24, parts: int = 90
+) -> list[str]:
+    """Return up, down, gap, or empty for each slice of the window."""
+    return [str(row["mark"]) for row in segment_rows(results, now, hours=hours, parts=parts)]
 
 
 def activity_lines(results: list[CheckResult], *, limit: int = 12) -> list[dict[str, str]]:

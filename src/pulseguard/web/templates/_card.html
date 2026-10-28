@@ -10,7 +10,7 @@
 <div class="mon-msg">{{ card.plain }}</div>
 <div class="mon-meta">
 <span>Checked <time datetime="{{ card.checked_at }}">{{ card.checked }}</time></span>
-<span class="next" title="Next check"><span class="cd" data-due="{{ card.next_check_at }}" data-total="{{ card.interval }}"><span></span></span></span>
+<span class="next"><span class="cd{% if card.quiet %} is-quiet{% endif %}" role="img" aria-label="{% if card.quiet %}no report{% elif card.kind == 'agent' %}Next report{% else %}Next check{% endif %}" title="{% if card.quiet %}no report{% elif card.kind == 'agent' %}Next report{% else %}Next check{% endif %}" data-due="{{ card.next_check_at }}" data-total="{{ card.interval }}" data-kind="{{ card.kind }}"{% if card.quiet %} data-quiet="1"{% endif %}><span class="cd-label"></span></span></span>
 </div>
 {% if card.points|length > 1 %}
 <div class="spark" data-spark="{{ card.points|join(',') }}" style="height:34px"></div>

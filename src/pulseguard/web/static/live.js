@@ -22,9 +22,28 @@ var pgLive = {
     return "Live · updated " + seconds + "s ago";
   },
   dueLabel: function (nextMs, nowMs) {
-    if (typeof nextMs !== "number" || !isFinite(nextMs) || nextMs <= nowMs) return "due now";
+    if (typeof nextMs !== "number" || !isFinite(nextMs) || nextMs <= nowMs) return "now";
     var left = Math.round((nextMs - nowMs) / 1000);
+    if (left < 1) return "now";
     return left >= 100 ? Math.round(left / 60) + "m" : left + "s";
+  },
+  dueText: function (nextMs, nowMs, report) {
+    var noun = report ? "report" : "check";
+    if (typeof nextMs !== "number" || !isFinite(nextMs) || nextMs <= nowMs) return "Due now";
+    var left = Math.max(0, Math.round((nextMs - nowMs) / 1000));
+    if (left < 1) return "Due now";
+    return "Next " + noun + " in " + left + " s";
+  },
+  clockLabel: function (iso) {
+    var when = new Date(iso);
+    if (isNaN(when.getTime())) return "";
+    return when.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
   },
   newerRows: function (rows, sinceId) {
     return (rows || [])

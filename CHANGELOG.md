@@ -4,6 +4,8 @@
 
 Every Agents row can be deleted, including a last-push name from before Add agent. Delete removes that record and the last-push time, and asks whether to keep or delete the monitor and its history. Open monitor appears only after a monitor with that name exists. Startup adopts those older names into the agent list. The monitor is still created on the next push.
 
+The sidebar scrolls on its own, with Settings and Help pinned, and the monitor list scrolls inside it. The collector, Add agent, and alert forms leave room around their buttons. A countdown ring stays inside its circle, a silent agent shows a neutral mark instead of a timer, and an agent push with no latency does not read 0 ms. The response chart and the last-90 strip show the time and the value under the pointer.
+
 ## 1.3.8 - 2026-10-29
 
 An accepted `pulseguard push` creates a passive monitor of kind agent. The dashboard, sidebar, monitors list, and detail page show it with the other monitors. Each push is a normal check result, so history, the 24 h bar, uptime, SLA, and the live check log include it. Three failures open an incident and send the email alert. One success resolves it, and Depends on still suppresses a failure. Silence longer than three expected intervals records "no report from agent" and opens an incident. The Agents page links to the monitor. Deleting an agent asks whether to keep that history.

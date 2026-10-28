@@ -47,8 +47,8 @@
 <input id="smtp-starttls" name="smtp_starttls" type="checkbox" value="1" {% if settings.smtp_starttls %}checked{% endif %} hidden>
 <div><b>Also email on recovery</b><div class="hint">STARTTLS. A blank password keeps the saved one.</div></div>
 </div>
-<div class="row-act"><button class="btn btn-primary" type="submit">Save</button></div>
+<div class="form-foot"><button class="btn btn-primary" type="submit">Save</button></div>
 </form>
-<form method="post" action="{{ url_for('alert_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Send test alert</button></form>
+<form class="form-foot" method="post" action="{{ url_for('alert_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Send test alert</button></form>
 </section>
 {% endblock %}

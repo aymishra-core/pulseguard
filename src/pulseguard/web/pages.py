@@ -45,6 +45,7 @@ from pulseguard.agent.roster import (
     remove_agent,
     touch_seen,
 )
+from pulseguard.checks.agent_check import STALE_MESSAGE
 from pulseguard.checks.base import build_check
 from pulseguard.checks.defacement import DefacementCheck
 from pulseguard.checks.heartbeat import HeartbeatCheck
@@ -92,6 +93,7 @@ from pulseguard.web.board import (
     mean_successful_ms,
     monitor_state,
     plain_message,
+    segment_rows,
     segments,
     short_span,
     sparkline,
@@ -161,6 +163,9 @@ def register_pages(app: Flask) -> None:
         offset = _tz_offset()
         with _repository() as repo:
             snap = build_snapshot(repo, utc_now(), offset_minutes=offset)
+            chart = _chart_name()
+            if chart:
+                snap["chart_series"] = _chart_series_for(repo, chart)
         tag = _etag(snap)
         if request.headers.get("If-None-Match") == tag:
             response = Response(status=304)
@@ -307,7 +312,11 @@ def register_pages(app: Flask) -> None:
             incidents = [row for row in repo.incidents() if row.monitor == chosen]
             options = repo.monitor_options(chosen)
         latest = results[-1] if results else None
-        latencies = [row.latency_ms for row in results[-100:]]
+        latencies = [
+            row.latency_ms
+            for row in results[-100:]
+            if _has_latency(record.kind, row.message, row.latency_ms)
+        ]
         now = utc_now()
         today = [row for row in results if row.checked_at.date() == now.date()]
         return _page(
@@ -328,14 +337,8 @@ def register_pages(app: Flask) -> None:
             state_for=_state_span(results, now),
             bar=segments(results, now),
             ping=_ping_line(record, options),
-            series=[
-                [
-                    stamp(row.checked_at),
-                    None if row.message == "monitoring gap" else round(row.latency_ms),
-                    bool(row.ok) and row.message != "monitoring gap",
-                ]
-                for row in results[-400:]
-            ],
+            series=_chart_points(results),
+            strip=_strip_cells(results, now, agent=record.kind == "agent"),
             failures=[stamp(row.checked_at) for row in results[-400:] if not row.ok],
         )
 
@@ -1162,8 +1165,10 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
             line = "No data"
         elif result is None:
             line = "No results yet. The first check has not run."
-        else:
+        elif _has_latency(record.kind, raw, result.latency_ms):
             line = f"{plain_message(raw).rstrip('.')} · {round(result.latency_ms)} ms"
+        else:
+            line = plain_message(raw).rstrip(".")
         labels = segments(mine, now, parts=48)
         pill_class, pill_label = _pill(state, tone)
         cards.append(
@@ -1179,8 +1184,9 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
                 "message": raw,
                 "plain": line,
                 "latency": None
-                if result is None or raw == "monitoring gap"
+                if result is None or not _has_latency(record.kind, raw, result.latency_ms)
                 else round(result.latency_ms),
+                "quiet": record.kind == "agent" and raw == STALE_MESSAGE,
                 "checked": clock(checked_at),
                 "checked_at": "" if checked_at is None else checked_at.isoformat(),
                 "last_checked_at": "" if checked_at is None else checked_at.isoformat(),
@@ -1192,7 +1198,7 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
                 "points": [
                     round(item.latency_ms)
                     for item in mine[-20:]
-                    if item.message != "monitoring gap"
+                    if _has_latency(record.kind, item.message, item.latency_ms)
                 ],
                 "segments": labels,
                 "bar": "".join(_BAR.get(part, "g") for part in labels),
@@ -1213,7 +1219,8 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
     )
     result_ids = {index: rank for rank, index in enumerate(ranked, start=1)}
     log_rows = [_log_row(results[index], result_ids[index]) for index in ranked]
-    checks = _check_lines(results, ranked, result_ids)
+    agents = {record.name for record in records if record.kind == "agent"}
+    checks = _check_lines(results, ranked, result_ids, agents)
     by_moment = {
         (item.monitor, item.checked_at.isoformat()): result_ids[index]
         for index, item in enumerate(results)
@@ -1405,6 +1412,8 @@ def _etag(snap: dict[str, Any]) -> str:
         "log": [row.get("id") for row in snap["log"]],
         "cert": snap["next_cert_expiry"],
     }
+    if snap.get("chart_series") is not None:
+        core["chart"] = snap["chart_series"]
     raw = json.dumps(core, sort_keys=True, default=str).encode()
     return '"' + hashlib.sha256(raw).hexdigest()[:32] + '"'
 
@@ -2227,17 +2236,95 @@ def _state_span(results: list[Any], now: datetime) -> str:
     return f"{word} for {clock}"
 
 
+def _chart_name() -> str:
+    """Return a monitor name from ``?chart=``, or an empty string."""
+    raw = request.args.get("chart", "")
+    if not raw:
+        return ""
+    try:
+        return require_monitor_name(raw)
+    except ConfigValidationError:
+        return ""
+
+
+def _chart_series_for(repo: Any, name: str) -> list[list[object]]:
+    """Return the detail chart for one monitor. An unknown name is an empty list."""
+    return _chart_points(list(repo.results_for(name)))
+
+
+def _chart_points(results: list[CheckResult]) -> list[list[object]]:
+    """Return ``[time, latency or null, ok, message, gap]`` for the response chart."""
+    points: list[list[object]] = []
+    for row in results[-400:]:
+        gap = row.message == "monitoring gap"
+        points.append(
+            [
+                stamp(row.checked_at),
+                None if gap else round(row.latency_ms),
+                False if gap else bool(row.ok),
+                "No data" if gap else plain_message(row.message),
+                gap,
+            ]
+        )
+    return points
+
+
+def _strip_cells(
+    results: list[CheckResult], now: datetime, *, agent: bool
+) -> list[dict[str, object]]:
+    """Return one hover record for each cell of the last-90 strip."""
+    cells: list[dict[str, object]] = []
+    for row in segment_rows(results, now):
+        mark = str(row["mark"])
+        if mark in {"gap", "empty"}:
+            cells.append(
+                {
+                    "start": row["start"],
+                    "end": row["end"],
+                    "status": "No data",
+                    "latency": None,
+                    "message": "No data",
+                }
+            )
+            continue
+        latency = row["latency"]
+        if agent and latency == 0:
+            latency = None
+        cells.append(
+            {
+                "start": row["at"] or row["start"],
+                "end": row["end"],
+                "status": "Up" if mark == "up" else "Down",
+                "latency": latency,
+                "message": plain_message(str(row["message"])),
+            }
+        )
+    return cells
+
+
+def _has_latency(kind: str, message: str, latency_ms: float) -> bool:
+    """An agent push with no measured latency stays blank instead of reading 0 ms."""
+    if message == "monitoring gap":
+        return False
+    return not (kind == "agent" and round(latency_ms) == 0)
+
+
 def _check_lines(
     results: list[CheckResult],
     ranked: list[int],
     result_ids: dict[int, int],
+    agents: set[str] | None = None,
 ) -> list[dict[str, object]]:
     """Return completed checks, newest first, for the live log."""
+    hidden = agents or set()
     lines: list[dict[str, object]] = []
     for index in reversed(ranked):
         item = results[index]
         if item.message == "monitoring gap":
             continue
+        latency: int | None = round(item.latency_ms)
+        if item.monitor in hidden and latency == 0:
+            latency = None
         lines.append(
             {
                 "id": result_ids[index],
@@ -2246,7 +2333,7 @@ def _check_lines(
                 "name": item.monitor,
                 "result": "UP" if item.ok else "DOWN",
                 "message": " ".join((item.message or "").split()),
-                "latency": round(item.latency_ms),
+                "latency": latency,
             }
         )
         if len(lines) == 50:

@@ -108,7 +108,7 @@
 <div class="card-head"><h2>Live check log</h2><span class="grow"></span><span class="live is-streaming" data-log-live><span class="dot"></span><span data-log-badge>streaming</span></span></div>
 <div class="log" data-log>
 {% for row in checks[:20] %}
-<div class="row" data-log-id="{{ row.id }}"><span class="ts">{{ row.time }}</span> <b>{{ row.name }}</b> <span class="lv {{ 'ok' if row.result == 'UP' else 'bad' }}">{{ row.result }}</span> <span class="log-msg">{{ row.message }}</span> <span class="log-ms">{{ row.latency }} ms</span></div>
+<div class="row" data-log-id="{{ row.id }}"><span class="ts">{{ row.time }}</span> <b>{{ row.name }}</b> <span class="lv {{ 'ok' if row.result == 'UP' else 'bad' }}">{{ row.result }}</span> <span class="log-msg">{{ row.message }}</span>{% if row.latency is not none %} <span class="log-ms">{{ row.latency }} ms</span>{% endif %}</div>
 {% else %}
 <div class="row log-empty" data-log-empty>Waiting for the next check...</div>
 {% endfor %}

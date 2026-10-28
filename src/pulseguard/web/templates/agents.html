@@ -4,7 +4,7 @@
 {% block page %}
 <div class="head">
 <div><div class="eyebrow">System</div><h1 class="title">Agents</h1><p class="sub">Add an agent, copy the command, and run it on the other machine. An accepted push is a monitor with the same name.</p></div>
-<form method="post" action="{{ url_for('agent_add') }}" class="row-act">
+<form method="post" action="{{ url_for('agent_add') }}" class="add-agent">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="field"><label for="agent-name">Name</label><input id="agent-name" name="name" autocomplete="off" required></div>
 <button class="btn btn-primary" type="submit">Add agent</button>
@@ -51,21 +51,21 @@
 <div class="empty"><b>No rejected attempts</b><p>A wrong token, a message that is too long, or a public address shows up here.</p></div>
 {% endfor %}
 </section>
-<section class="card card-pad">
+<section class="card card-pad collector-card">
 <h3>Collector</h3>
 <p class="hint">On the agent machine, run <code>pulseguard push</code> with the host and port saved here. The token comes from PULSEGUARD_AGENT_TOKEN. Tokens are 16 to 128 characters. The collector accepts loopback and private addresses only.</p>
-<form method="post" action="{{ url_for('agents') }}">
+<form class="collector" method="post" action="{{ url_for('agents') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<div class="grid3">
+<div class="collector-grid">
 <div class="field"><label for="host">Collector host</label><input id="host" name="host" type="text" value="{{ host }}"></div>
 <div class="field"><label for="agent-port">Port</label><input id="agent-port" name="port" type="number" value="{{ port }}"></div>
+</div>
 <div class="switch-row">
 <button class="switch" type="button" role="switch" aria-checked="{{ 'true' if enabled else 'false' }}" aria-controls="agent-enabled" data-label="Collector" aria-label="Collector"></button>
 <input id="agent-enabled" name="enabled" type="checkbox" value="1" {% if enabled %}checked{% endif %} hidden>
 <div><b>Collector</b><div class="hint">{% if bound %}Listening on {{ bound }}{% else %}Saved. Restart PulseGuard to start listening.{% endif %}</div></div>
 </div>
-</div>
-<button class="btn btn-primary" type="submit">Save</button>
+<div class="form-foot"><button class="btn btn-primary" type="submit">Save</button></div>
 </form>
 </section>
 {% endblock %}

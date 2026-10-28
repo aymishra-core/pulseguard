@@ -40,15 +40,16 @@
 </section>
 <section class="card">
 <div class="card-head"><h3>Response time</h3><div class="tabs" role="tablist"><button type="button" data-range="1h">1 h</button><button type="button" data-range="24h" aria-selected="true">24 h</button><button type="button" data-range="7d">7 d</button><button type="button" data-range="30d">30 d</button></div></div>
-<div style="position:relative">
-<svg class="chart" data-chart viewBox="0 0 1000 280" role="img" aria-label="Latency"></svg>
+<div class="chart-wrap">
+<svg class="chart" data-chart data-monitor="{{ record.name }}" data-kind="{{ record.kind }}" viewBox="0 0 1000 280" tabindex="0" role="img" aria-label="Response time. Arrow keys move the crosshair."></svg>
 <div class="tip"></div>
 </div>
 <script type="application/json" id="chart-data">{{ series|tojson }}</script>
 <div class="legend"><span>Latency</span><span>p50</span><span>p95</span><span>Grey is no data, not downtime</span></div>
 {% set ns = namespace(bar='') %}
 {% for part in bar %}<span class="sr">{% if part == 'up' %}{% set ns.bar = ns.bar ~ 'o' %}{% elif part == 'down' %}{% set ns.bar = ns.bar ~ 'x' %}{% else %}{% set ns.bar = ns.bar ~ 'g' %}{% endif %}</span>{% endfor %}
-<div class="card-pad"><div class="mon-up"><span>Last 90 checks</span><b>{{ uptime_24 }}</b></div><div class="bar" data-bar="{{ ns.bar }}"></div></div>
+<div class="card-pad bar-host"><div class="mon-up"><span>Last 90 checks</span><b>{{ uptime_24 }}</b></div><div class="bar" data-bar="{{ ns.bar }}" data-strip="strip-data"></div><div class="tip strip-tip"></div></div>
+<script type="application/json" id="strip-data">{{ strip|tojson }}</script>
 </section>
 <section class="card">
 <div class="card-head"><h3>Recent results</h3></div>
@@ -60,7 +61,7 @@
 <td><time datetime="{{ stamp(row.checked_at) }}">{{ clock(row.checked_at) }}</time></td>
 <td><span class="pill {{ 'warn' if row.message == 'monitoring gap' else ('up' if row.ok else 'down') }}">{{ 'No data' if row.message == 'monitoring gap' else ('Up' if row.ok else 'Down') }}</span></td>
 <td>{{ 'No data' if row.message == 'monitoring gap' else row.message }}</td>
-<td class="metric">{% if row.message == 'monitoring gap' %}—{% else %}{{ row.latency_ms|round|int }} ms{% endif %}</td>
+<td class="metric">{% if row.message == 'monitoring gap' or (record.kind == 'agent' and row.latency_ms|round|int == 0) %}—{% else %}{{ row.latency_ms|round|int }} ms{% endif %}</td>
 </tr>
 {% else %}
 <tr><td colspan="4">No results yet.</td></tr>
