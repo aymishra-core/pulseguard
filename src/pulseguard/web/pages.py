@@ -1123,6 +1123,7 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
     )
     result_ids = {index: rank for rank, index in enumerate(ranked, start=1)}
     log_rows = [_log_row(results[index], result_ids[index]) for index in ranked]
+    checks = _check_lines(results, ranked, result_ids)
     by_moment = {
         (item.monitor, item.checked_at.isoformat()): result_ids[index]
         for index, item in enumerate(results)
@@ -1177,6 +1178,7 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
         "hero_plain": hero["hero_plain"],
         "last_cycle": "" if last_sweep_at is None else last_sweep_at.isoformat(),
         "stream": list(reversed(log_rows[-50:])),
+        "checks": checks,
         "log": list(reversed(log_rows[-50:])),
         "alerts_ready": alerts_ready,
         "has_heartbeat": has_heartbeat,
@@ -1909,6 +1911,33 @@ def _state_span(results: list[Any], now: datetime) -> str:
     clock = f"{hours}h {minutes}m" if hours else f"{minutes}m"
     word = "up" if latest.ok else "down"
     return f"{word} for {clock}"
+
+
+def _check_lines(
+    results: list[CheckResult],
+    ranked: list[int],
+    result_ids: dict[int, int],
+) -> list[dict[str, object]]:
+    """Return completed checks, newest first, for the live log."""
+    lines: list[dict[str, object]] = []
+    for index in reversed(ranked):
+        item = results[index]
+        if item.message == "monitoring gap":
+            continue
+        lines.append(
+            {
+                "id": result_ids[index],
+                "at": item.checked_at.isoformat(),
+                "time": clock_hms(item.checked_at),
+                "name": item.monitor,
+                "result": "UP" if item.ok else "DOWN",
+                "message": " ".join((item.message or "").split()),
+                "latency": round(item.latency_ms),
+            }
+        )
+        if len(lines) == 50:
+            break
+    return lines
 
 
 def _stream_row(item: CheckResult) -> dict[str, object]:

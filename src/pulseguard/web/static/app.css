@@ -276,10 +276,14 @@ a.stp:hover{color:var(--accent)}
 .feed li.ok{--c:var(--ok)}.feed li.bad{--c:var(--danger)}.feed li.gap{--c:var(--faint)}.feed li.warn{--c:var(--warn)}
 .feed b{font-weight:600}.feed small{color:var(--muted);display:block;font-size:12.5px}
 .feed time{font:500 12px/1.6 var(--mono);color:var(--faint);white-space:nowrap}
-.log{margin:0;padding:14px 18px 16px;font:400 12.5px/1.75 var(--mono);height:268px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:0;background:var(--inset);border-top:1px solid var(--line);border-radius:0 0 var(--r-lg) var(--r-lg)}
-.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:in .35s var(--ease)}
+.log{margin:0;padding:14px 18px 16px;font:400 12.5px/1.75 var(--mono);height:268px;overflow:auto;display:flex;flex-direction:column;justify-content:flex-start;gap:0;background:var(--inset);border-top:1px solid var(--line);border-radius:0 0 var(--r-lg) var(--r-lg)}
+.log .row{flex:0 0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:in .35s var(--ease)}
 .log .ts{color:var(--faint)}.log .lv{display:inline-block;min-width:4.4em;font-weight:600}
 .log .ok{color:var(--ok)}.log .bad{color:var(--danger)}.log .wn{color:var(--warn)}
+.log-empty{color:var(--muted)}
+[data-log-live].is-streaming,[data-log-live].is-streaming .dot{color:var(--ok)}
+[data-log-live].is-reconnecting,[data-log-live].is-reconnecting .dot{color:var(--warn)}
+[data-log-live].is-paused,[data-log-live].is-paused .dot{color:var(--faint);animation:none}
 @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .log-cursor::after{content:"▍";color:var(--accent);animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}

@@ -110,12 +110,12 @@
 </ul>
 </div>
 <div class="card">
-<div class="card-head"><h2>Live check log</h2><span class="grow"></span><span class="live"><span class="dot" style="color:var(--ok)"></span>streaming</span></div>
+<div class="card-head"><h2>Live check log</h2><span class="grow"></span><span class="live is-streaming" data-log-live><span class="dot"></span><span data-log-badge>streaming</span></span></div>
 <div class="log" data-log>
-{% for row in stream %}
-<div class="row" data-log-id="{{ row.id }}"><span class="ts"><time datetime="{{ row.at }}">{{ clock(row.at) }}</time></span> <span class="lv {{ 'ok' if row.mark == 'PASS' else ('bad' if row.mark == 'FAIL' else 'wn') }}">{{ row.mark }}</span> <b>{{ row.name }}</b> <span>{{ row.plain }}{% if row.mark != 'GAP' %} · {{ row.latency }} ms{% endif %}</span></div>
+{% for row in checks[:20] %}
+<div class="row" data-log-id="{{ row.id }}"><span class="ts">{{ row.time }}</span> <b>{{ row.name }}</b> <span class="lv {{ 'ok' if row.result == 'UP' else 'bad' }}">{{ row.result }}</span> <span class="log-msg">{{ row.message }}</span> <span class="log-ms">{{ row.latency }} ms</span></div>
 {% else %}
-<div class="row"><span>No activity yet</span></div>
+<div class="row log-empty" data-log-empty>Waiting for the next check...</div>
 {% endfor %}
 </div>
 </div>

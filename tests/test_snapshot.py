@@ -207,6 +207,16 @@ assert(live.dueLabel(500, 1000) === "due now", "late");
 assert(live.dueLabel(5000, 1000) === "4s", "seconds");
 const rows = live.newerRows([{id:1,at:"b"},{id:3,at:"a"},{id:2,at:"c"}], 1);
 assert(rows.map(function (row) { return row.id; }).join() === "3,2", "order");
+const added = live.mergeChecks([{id:1},{id:2}], [{id:5},{id:4},{id:3},{id:2}], 50);
+assert(added.map(function (row) { return row.id; }).join() === "5,4,3,1,2", "prepend");
+const held = [];
+for (let id = 48; id >= 1; id -= 1) held.push({id: id});
+const capped = live.mergeChecks(held, [{id: 51}, {id: 50}, {id: 49}], 50);
+assert(capped.length === 50 && capped[0].id === 51 && capped[49].id === 2, "cap");
+assert(live.logBadge(1000, 1000, false, 5000) === "streaming", "live");
+assert(live.logBadge(1000, 11000, false, 5000) === "streaming", "edge");
+assert(live.logBadge(1000, 11001, false, 5000) === "reconnecting", "outage");
+assert(live.logBadge(1000, 1000, true, 5000) === "paused", "hidden");
 """
     result = subprocess.run(
         ["node", "-e", script, str(_LIVE)],

@@ -30,6 +30,25 @@ var pgLive = {
     return (rows || [])
       .filter(function (row) { return row.id > sinceId; })
       .sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+  },
+  mergeChecks: function (existing, incoming, cap) {
+    var maxId = 0;
+    (existing || []).forEach(function (row) {
+      var id = +row.id || 0;
+      if (id > maxId) maxId = id;
+    });
+    var fresh = (incoming || []).filter(function (row) {
+      return row && +row.id > maxId;
+    });
+    var merged = fresh.concat(existing || []);
+    var limit = cap || 50;
+    return merged.slice(0, limit);
+  },
+  logBadge: function (lastOkMs, nowMs, hidden, pollMs) {
+    if (hidden) return "paused";
+    var windowMs = 2 * (pollMs || 5000);
+    if (typeof lastOkMs !== "number" || nowMs - lastOkMs > windowMs) return "reconnecting";
+    return "streaming";
   }
 };
 if (typeof module !== "undefined" && module.exports) module.exports = pgLive;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.5 - 2026-10-29
+
+The live check log opens with the last 20 completed checks and prepends each new one from the dashboard payload: time, monitor, UP or DOWN, the check message, and the latency. It keeps 50 lines. The badge says streaming only while a refresh has succeeded inside two poll intervals, reconnecting after that, and paused while the tab is hidden.
+
 ## 1.3.4 - 2026-10-29
 
 The add and edit form asks for a target the way the check uses it. HTTP, keyword, and defacement want a full URL. TCP, TLS, and DNS want a host, and a pasted URL offers that host (and the port, for TCP and TLS) in one click. The port field is only for TCP and TLS: TLS starts at 443, and TCP requires a port from 1 to 65535. Depends on is a single-line dropdown that adds removable chips, hides the monitor being edited and any choice that would cycle, and stops at 8.
