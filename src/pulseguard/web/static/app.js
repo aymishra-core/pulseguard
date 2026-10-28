@@ -123,14 +123,27 @@ if(wiz){var secs=$$(".sect",wiz.parentNode),steps=$$(".w",wiz),cur=0;
   var kind=wiz.getAttribute("data-initial")||"http";
   function go(n){cur=Math.max(0,Math.min(secs.length-1,n));secs.forEach(function(s,i){s.classList.toggle("on",i===cur)});steps.forEach(function(s,i){s.classList.toggle("on",i===cur);s.classList.toggle("done",i<cur)});
     if(cur===secs.length-1)review()}
-  $$("[data-next]").forEach(function(b){b.addEventListener("click",function(){
-    if(cur===1){var t=$("#f-target"),n=$("#f-name"),bad=false;[n,t].forEach(function(i){var f=i.closest(".field"),v=i.value.trim();var ok=i===n?/^[A-Za-z0-9_-]{1,128}$/.test(v):(/^(tcp|dns|tls)$/.test(kind)?/^[A-Za-z0-9.-]+$/.test(v):/^https?:\/\//.test(v));if(kind==="heartbeat")ok=i===n?ok:true;f.classList.toggle("bad",!ok);if(!ok)bad=true});if(bad)return}
-    go(cur+1)})});
+  $$("[data-next]").forEach(function(b){b.addEventListener("click",function(){if(cur===1&&!validateTarget())return;go(cur+1)})});
   $$("[data-prev]").forEach(function(b){b.addEventListener("click",function(){go(cur-1)})});
+  var port=$("#port");
+  if(port)port.addEventListener("input",function(){port._auto=false});
   function applyKind(name){kind=name;var hid=$("#f-kind");if(hid)hid.value=name;$$(".kind").forEach(function(x){x.setAttribute("aria-pressed",x.getAttribute("data-kind")===name)});
   $$("[data-only]").forEach(function(f){f.hidden=f.getAttribute("data-only").split(" ").indexOf(kind)<0});
-  var t=$("#f-target");if(t){t.placeholder=/^(tcp|dns|tls)$/.test(kind)?"example.com":"https://example.com"}}
-$$(".kind").forEach(function(k){k.addEventListener("click",function(){applyKind(k.getAttribute("data-kind"))})});applyKind(kind);
+  var t=$("#f-target"),msg=pgForm.messages[kind]||"";if(t)t.placeholder=pgForm.placeholders[kind]||"";
+  var hint=$("[data-target-hint]"),err=$("[data-target-err]");if(hint)hint.textContent=msg;if(err)err.textContent=msg;
+  if(port){if(kind==="tls"&&port.value.trim()===""){port.value="443";port._auto=true}else if(kind==="tcp"&&port._auto){port.value="";port._auto=false}}
+  paintFix()}
+  function paintFix(){var t=$("#f-target"),b=$("[data-fix]");if(!t||!b)return;var found=pgForm.urlFix(kind,t.value);b.hidden=!found;b.textContent=found?found.label:""}
+  function validateTarget(){["#f-name","#f-target","#port"].forEach(function(id){var node=$(id);if(node&&node.closest(".field"))node.closest(".field").classList.remove("bad")});
+    var name=$("#f-name"),target=$("#f-target"),problems=pgForm.stepProblems({kind:kind,name:name?name.value:"",editing:name&&name.hasAttribute("readonly"),target:target?target.value:"",port:port?port.value:""});
+    problems.forEach(function(item){var node=item.field==="name"?name:item.field==="port"?port:target;if(!node)return;var field=node.closest(".field");if(!field)return;field.classList.add("bad");var err=$(".err",field);if(err)err.textContent=item.message});
+    paintFix();return problems.length===0}
+  var targetInput=$("#f-target");
+  if(targetInput)targetInput.addEventListener("input",paintFix);
+  var fix=$("[data-fix]");
+  if(fix)fix.addEventListener("click",function(){var t=$("#f-target"),found=t?pgForm.urlFix(kind,t.value):null;if(!t||!found)return;t.value=found.host;if((kind==="tcp"||kind==="tls")&&port){port.value=String(found.port);port._auto=false}var field=t.closest(".field");if(field)field.classList.remove("bad");if(port&&pgForm.portOk(port.value)){var pf=port.closest(".field");if(pf)pf.classList.remove("bad")}paintFix()});
+  $$(".kind").forEach(function(k){k.addEventListener("click",function(){applyKind(k.getAttribute("data-kind"))})});applyKind(kind);
+  wireDeps();
   function review(){var set=function(id,v){var n=document.getElementById(id);if(n)n.textContent=v};var iv=$("#f-int"),rv=$("[name=retries]");set("r-kind",kind);set("r-name",($("#f-name")||{}).value||"-");set("r-target",($("#f-target")||{}).value||"-");set("r-int",(iv?iv.value:"60")+" s");set("r-ret",(rv?rv.value:"3")+" attempts")}
   $$(".stepper").forEach(function(s){var o=$("input",s)||$("output",s),b=$$("button",s),mn=+s.getAttribute("data-min"),mx=+s.getAttribute("data-max"),st=+s.getAttribute("data-step")||1;
     function read(){return +(o.value!=null&&o.tagName==="INPUT"?o.value:o.textContent)||0}
@@ -138,7 +151,24 @@ $$(".kind").forEach(function(k){k.addEventListener("click",function(){applyKind(
     b[0].addEventListener("click",function(){write(Math.max(mn,read()-st))});b[1].addEventListener("click",function(){write(Math.min(mx,read()+st))})});
   window.pgSync=function(){};
   window.pgInt=function(){var n=$("#f-int");return n?n.value:"60"};
-  go(0)}
+  go(+(wiz.getAttribute("data-step")||0))}
+function wireDeps(){var root=$("[data-dep]");if(!root)return;var toggle=$(".dep-btn",root),pop=$("[data-dep-pop]",root),list=$(".dep-list",root),chips=$("[data-dep-chips]",root),fields=$("[data-dep-fields]",root),search=$(".dep-search",root),limit=$("[data-dep-limit]",root),max=+(root.getAttribute("data-max")||8),sel=0;
+  function chosen(){return $$("input",fields).map(function(n){return n.value})}
+  function visible(){return $$("[role=option]",list).filter(function(li){return !li.hidden})}
+  function paintLabel(){var count=chosen().length;toggle.textContent=pgForm.menuLabel(count);toggle.disabled=count>=max;if(limit)limit.hidden=count<max}
+  function hideChosen(){var have={};chosen().forEach(function(name){have[name]=true});$$("[role=option]",list).forEach(function(li){var q=search?search.value.trim().toLowerCase():"";li.hidden=!!have[li.getAttribute("data-name")]||(q&&li.textContent.toLowerCase().indexOf(q)<0)})}
+  function mark(){var rows=visible();rows.forEach(function(li,i){li.setAttribute("aria-selected",i===sel)});if(rows[sel])rows[sel].scrollIntoView({block:"nearest"})}
+  function open(){if(toggle.disabled)return;hideChosen();sel=0;pop.hidden=false;toggle.setAttribute("aria-expanded","true");mark();if(search)search.focus();else if(visible()[0])visible()[0].focus()}
+  function close(){pop.hidden=true;toggle.setAttribute("aria-expanded","false");toggle.focus()}
+  function add(name){if(!name)return;var next=pgForm.addChoice(chosen(),name,max);if(next.length===chosen().length)return;var chip=document.createElement("button");chip.type="button";chip.className="dep-chip";chip.setAttribute("data-dep-remove",name);chip.setAttribute("aria-label","Remove "+name);chip.textContent=name;var x=document.createElement("span");x.setAttribute("aria-hidden","true");x.textContent="×";chip.appendChild(x);chips.appendChild(chip);var input=document.createElement("input");input.type="hidden";input.name="depends_on";input.value=name;fields.appendChild(input);var row=$("[data-name='"+name.replace(/'/g,"\\'")+"']",list);if(row)row.hidden=true;paintLabel();close()}
+  function remove(name){$$("[data-dep-remove]",chips).forEach(function(chip){if(chip.getAttribute("data-dep-remove")===name)chip.remove()});$$("input",fields).forEach(function(input){if(input.value===name)input.remove()});var row=$("[data-name='"+name.replace(/'/g,"\\'")+"']",list);if(row)row.hidden=false;paintLabel()}
+  toggle.addEventListener("click",function(){if(pop.hidden)open();else close()});
+  if(search)search.addEventListener("input",function(){sel=0;hideChosen();mark()});
+  list.addEventListener("click",function(e){var li=e.target.closest?e.target.closest("[role=option]"):null;if(li&&!li.hidden)add(li.getAttribute("data-name"))});
+  chips.addEventListener("click",function(e){var chip=e.target.closest?e.target.closest("[data-dep-remove]"):null;if(chip)remove(chip.getAttribute("data-dep-remove"))});
+  root.addEventListener("keydown",function(e){var rows=visible();if(e.key==="Escape"){if(!pop.hidden){e.preventDefault();close()}return}if(e.key==="ArrowDown"){e.preventDefault();if(pop.hidden)open();else{sel=Math.min(rows.length-1,sel+1);mark()}}if(e.key==="ArrowUp"){e.preventDefault();if(!pop.hidden){sel=Math.max(0,sel-1);mark()}}if(e.key==="Enter"&&!pop.hidden){e.preventDefault();if(rows[sel])add(rows[sel].getAttribute("data-name"))}});
+  document.addEventListener("click",function(e){if(!pop.hidden&&!root.contains(e.target))close()});
+  paintLabel()}
 
 /* chart */
 var ch=$("[data-chart]");

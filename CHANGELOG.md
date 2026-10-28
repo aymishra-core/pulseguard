@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4 - 2026-10-29
+
+The add and edit form asks for a target the way the check uses it. HTTP, keyword, and defacement want a full URL. TCP, TLS, and DNS want a host, and a pasted URL offers that host (and the port, for TCP and TLS) in one click. The port field is only for TCP and TLS: TLS starts at 443, and TCP requires a port from 1 to 65535. Depends on is a single-line dropdown that adds removable chips, hides the monitor being edited and any choice that would cycle, and stops at 8.
+
 ## 1.3.3 - 2026-10-29
 
 The dashboard reads one snapshot. The hero, the tiles, the top-bar chip, the sidebar badges, Needs attention, the monitor cards, the activity feed, and the live log all come from that object, and `/api/dashboard` returns it. A poll applies a response only when it is newer, pauses while the tab is hidden, and says the connection is lost after 15 seconds without a success. The PulseGuard mark links to the dashboard.

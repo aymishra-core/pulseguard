@@ -81,6 +81,13 @@ from pulseguard.web.board import (
     window,
 )
 from pulseguard.web.console import _password_matches, _repository, _signed_in
+from pulseguard.web.field_rules import (
+    PLACEHOLDERS,
+    blocked_monitors,
+    port_problem,
+    target_message,
+    target_problem,
+)
 
 _KINDS = ("http", "keyword", "defacement", "tcp", "dns", "tls", "heartbeat")
 _ICONS = {
@@ -818,15 +825,23 @@ def _monitor_form(name: str | None) -> str | RedirectResponse | tuple[str, int]:
             if record is None:
                 return "unknown monitor", 404
             values = _record_values(record, repo.monitor_options(name))
+    kind = str(values.get("kind") or "http")
     with _repository() as repo:
-        others = [record.name for record in repo.monitors() if record.name != name]
+        catalog = [record.name for record in repo.monitors()]
+        stored = repo.option_map()
+    edges = {item: _dependency_names(stored.get(item, {}).get("depends_on")) for item in catalog}
+    blocked = blocked_monitors(edges, name)
+    choices = [item for item in catalog if item != name and item not in blocked]
     return _page(
         "monitor_form.html",
         values=values,
         error=error,
-        others=others,
+        choices=choices,
+        blocked=blocked,
         editing=name is not None,
         kinds=_KINDS,
+        target_hint=target_message(kind),
+        target_placeholder=_target_placeholder(kind),
     )
 
 
@@ -870,8 +885,14 @@ def _spec_from_form(existing: str | None) -> tuple[dict[str, object], dict[str, 
     interval = _number("interval", default=30)
     spec: dict[str, object] = {"kind": kind, "name": name, "interval": interval}
     options: dict[str, object] = {}
+    problems: list[str] = []
     if kind in _HTTP or kind in _HOST:
-        spec["target"] = str(request.form.get("target", "")).strip()
+        target = str(request.form.get("target", "")).strip()
+        problem = target_problem(kind, target)
+        if problem:
+            problems.append(problem)
+        else:
+            spec["target"] = target
     if kind == "heartbeat":
         token = str(request.form.get("token", "")).strip() or HeartbeatCheck.new_token()
         spec["target"] = token
@@ -879,7 +900,7 @@ def _spec_from_form(existing: str | None) -> tuple[dict[str, object], dict[str, 
         if grace is not None:
             spec["grace_seconds"] = grace
             options["grace_seconds"] = grace
-    if kind in _HTTP:
+    if kind in _HTTP and not problems:
         _copy_optional(spec, options, "expected_status", "method", "retries", "retry_backoff")
         spec["allow_private"] = _checked("allow_private")
         options["allow_private"] = spec["allow_private"]
@@ -899,13 +920,18 @@ def _spec_from_form(existing: str | None) -> tuple[dict[str, object], dict[str, 
             options["expected_sha256"] = digest
         _copy_optional(spec, options, "alert_after")
     if kind in {"tcp", "tls"}:
-        port = _number("port", default=None)
-        if port is None:
-            raise ConfigValidationError("missing port")
-        spec["port"] = port
-        options["port"] = port
+        raw_port = str(request.form.get("port", "")).strip()
+        problem = port_problem(kind, raw_port)
+        if problem:
+            problems.append(problem)
+        else:
+            number = 443 if kind == "tls" and raw_port == "" else int(raw_port)
+            spec["port"] = number
+            options["port"] = number
         spec["allow_private"] = _checked("allow_private")
         options["allow_private"] = spec["allow_private"]
+    if problems:
+        raise ConfigValidationError(" ".join(dict.fromkeys(problems)))
     if kind == "dns":
         expected = [
             part.strip()
@@ -962,6 +988,18 @@ def _number(field: str, default: int | None) -> int | None:
 def _checked(field: str) -> bool:
     """Return True when a checkbox was ticked."""
     return request.form.get(field) == "1"
+
+
+def _dependency_names(raw: object) -> list[str]:
+    """Return the stored dependency names. Anything else is an empty list."""
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, str)]
+
+
+def _target_placeholder(kind: str) -> str:
+    """Return the target placeholder for the selected kind."""
+    return PLACEHOLDERS.get(kind, "")
 
 
 def _posted_values() -> dict[str, object]:
