@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.10 - 2026-10-29
+
+A silent agent records "no report from agent" once per expected interval until it pushes again. Three of those failures open one incident and send one email. A successful push resolves it. PulseGuard records nothing while it is stopped, and a restart does not add a second row for an interval that already has one.
+
 ## 1.3.9 - 2026-10-29
 
 Every Agents row can be deleted, including a last-push name from before Add agent. Delete removes that record and the last-push time, and asks whether to keep or delete the monitor and its history. Open monitor appears only after a monitor with that name exists. Startup adopts those older names into the agent list. The monitor is still created on the next push.

@@ -25,7 +25,6 @@ from pulseguard.core.gaps import AFTER_GAP_MESSAGE, GAP_MESSAGE, exceeds_gap, ga
 from pulseguard.core.incidents import (
     DEFAULT_FAILURES_BEFORE_OPEN,
     DEFAULT_SUCCESSES_BEFORE_RESOLVE,
-    MAX_STREAK,
     IncidentTracker,
 )
 from pulseguard.core.scheduler import (
@@ -128,7 +127,7 @@ class Engine:
         self._stored = 0
         self._max_queued = 0
         self._down: set[str] = set()
-        self._stale_sent: set[str] = set()
+        self._stale_queued: dict[str, datetime] = {}
         self._writer_error: BaseException | None = None
         self._started = False
         self._scheduler: Thread | None = None
@@ -420,7 +419,7 @@ class Engine:
                 LOGGER.warning("agent monitor rejected")
             touch_seen(repo, result.monitor, result.checked_at)
             with self._lock:
-                self._stale_sent.discard(result.monitor)
+                self._stale_queued.pop(result.monitor, None)
         finally:
             repo.close()
 
@@ -581,16 +580,12 @@ class Engine:
             self._down.add(result.monitor)
         from pulseguard.checks.agent_check import STALE_MESSAGE
 
-        silent = result.message == STALE_MESSAGE
-        if silent:
+        if result.message == STALE_MESSAGE:
             counts = True
         else:
             result, counts = self._annotate_gap(result, repository)
         suppressed = cause is not None and not result.ok
-        if silent and not result.ok and not suppressed:
-            action = self._silence_open(result)
-        else:
-            action = self.incidents.observe(result, suppressed=suppressed, counts=counts)
+        action = self.incidents.observe(result, suppressed=suppressed, counts=counts)
         if repository is not None and action == "open":
             opener = getattr(repository, "open_incident", None)
             if callable(opener):
@@ -605,20 +600,14 @@ class Engine:
         with self._lock:
             self._stored += 1
 
-    def _silence_open(self, result: CheckResult) -> str | None:
-        """Open an incident from one missed report. The streak still uses K."""
-        action: str | None = None
-        for _ in range(MAX_STREAK):
-            if self.incidents.is_open(result.monitor):
-                return action
-            action = self.incidents.observe(result, suppressed=False, counts=True)
-        return action
-
     def _watch_agents(self) -> None:
-        """Record one failure when an agent monitor has been silent for 3 intervals."""
+        """Record one failure per interval while an agent stays silent.
+
+        The next row waits until a full interval after the latest stored or
+        queued result, so a restart does not write a second row for that slot.
+        """
         if self._factory is None:
             return
-        from pulseguard.agent.roster import STALE_FACTOR
         from pulseguard.checks.agent_check import STALE_MESSAGE
 
         now = utc_now()
@@ -628,17 +617,16 @@ class Engine:
             for record in repo.monitors():
                 if record.kind != "agent" or not record.enabled:
                     continue
-                with self._lock:
-                    if record.name in self._stale_sent:
-                        continue
+                interval = float(record.interval_seconds)
                 rows = repo.results_for(record.name)
                 if not rows:
                     continue
-                latest = rows[-1]
-                if latest.message == STALE_MESSAGE:
-                    continue
-                age = (now - latest.checked_at).total_seconds()
-                if age <= record.interval_seconds * STALE_FACTOR:
+                latest_at = rows[-1].checked_at
+                with self._lock:
+                    queued = self._stale_queued.get(record.name)
+                if queued is not None and queued > latest_at:
+                    latest_at = queued
+                if (now - latest_at).total_seconds() < interval:
                     continue
                 due.append(record.name)
         finally:
@@ -651,14 +639,14 @@ class Engine:
                 latency_ms=0,
                 message=STALE_MESSAGE,
                 severity=Severity.CRITICAL,
-                checked_at=utc_now(),
+                checked_at=now,
             )
             try:
                 self._results.put_nowait(result)
             except Full:
                 continue
             with self._lock:
-                self._stale_sent.add(name)
+                self._stale_queued[name] = result.checked_at
 
     def _interval_for(self, name: str) -> float:
         """Return the scheduled interval, or 30 seconds when the monitor is new."""

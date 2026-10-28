@@ -134,34 +134,90 @@ def test_three_failures_open_an_incident_and_send_mail(
     assert len(subjects) == 1
 
 
-def test_silence_opens_an_incident_and_a_push_resolves_it(
+def test_silence_records_each_interval_and_one_push_resolves_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No push within 3 intervals opens an incident. The next push resolves it."""
+    """Three silent intervals open one incident and send one email. A push resolves it."""
     sent = _smtp(monkeypatch)
+    clock = _Clock()
+    monkeypatch.setattr("pulseguard.core.engine.utc_now", clock)
     database = tmp_path / "stale.db"
     token = "c" * 16
     engine = _start(database, token, notifier=_mailer())
     try:
         port = _port(engine)
-        _push(
-            port,
-            token,
-            "edge",
-            message="was up",
-            when=utc_now() - timedelta(seconds=181),
-        )
-        _wait(lambda: _open(database, "edge"))
-        _push(port, token, "edge", message="back")
+        _push(port, token, "edge", message="was up", when=clock.now)
+        _wait(lambda: _messages(database, "edge") == ["was up"])
+        interval = _interval(database, "edge")
+        clock.advance(interval)
+        _wait(lambda: _stale_count(database, "edge") == 1)
+        assert _open(database, "edge") is False
+        clock.advance(interval / 2)
+        time.sleep(0.4)
+        assert _stale_count(database, "edge") == 1
+        clock.advance(interval / 2)
+        _wait(lambda: _stale_count(database, "edge") == 2)
+        assert _open(database, "edge") is False
+        for step in range(3, 11):
+            clock.advance(interval)
+            _wait(lambda step=step: _stale_count(database, "edge") >= step)
+        assert _stale_count(database, "edge") == 10
+        assert _open(database, "edge")
+        assert len(_incidents(database, "edge")) == 1
+        opened = _subjects(sent, "incident opened")
+        assert len(opened) == 1
+        assert STALE_MESSAGE in opened[0]
+        assert _subjects(sent, "incident resolved") == []
+        client = _sign_in(database)
+        detail = client.get("/monitors/edge/view").get_data(as_text=True)
+        assert detail.count(STALE_MESSAGE) >= 10
+        assert "Recent results" in detail
+        incidents = client.get("/incidents").get_data(as_text=True)
+        assert "edge" in incidents
+        assert STALE_MESSAGE in incidents
+        assert "open" in incidents
+        _push(port, token, "edge", message="back", when=clock.now)
         _wait(lambda: _resolved(database, "edge"))
     finally:
         engine.stop()
-    with SqliteRepository(database) as repo:
-        messages = [item.message for item in repo.results_for("edge")]
-    assert STALE_MESSAGE in messages
-    subjects = [str(item["Subject"]) for item in sent]
-    assert any("incident opened" in item and STALE_MESSAGE in item for item in subjects)
-    assert any("incident resolved" in item for item in subjects)
+    assert _subjects(sent, "incident resolved") != []
+    assert len(_subjects(sent, "incident opened")) == 1
+
+
+def test_a_restart_while_stale_does_not_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh restart adds nothing, and a stopped engine stays quiet."""
+    clock = _Clock()
+    monkeypatch.setattr("pulseguard.core.engine.utc_now", clock)
+    database = tmp_path / "restart.db"
+    token = "c" * 16
+    engine = _start(database, token)
+    try:
+        port = _port(engine)
+        _push(port, token, "edge", message="was up", when=clock.now)
+        _wait(lambda: _messages(database, "edge") == ["was up"])
+        interval = _interval(database, "edge")
+        clock.advance(interval)
+        _wait(lambda: _stale_count(database, "edge") == 1)
+    finally:
+        engine.stop()
+    again = _start(database, token)
+    try:
+        time.sleep(0.4)
+        assert _stale_count(database, "edge") == 1
+    finally:
+        again.stop()
+    clock.advance(interval * 10)
+    time.sleep(0.4)
+    assert _stale_count(database, "edge") == 1
+    third = _start(database, token)
+    try:
+        _wait(lambda: _stale_count(database, "edge") == 2)
+        time.sleep(0.4)
+        assert _stale_count(database, "edge") == 2
+    finally:
+        third.stop()
 
 
 def test_a_down_dependency_suppresses_the_silence(tmp_path: Path) -> None:
@@ -459,6 +515,62 @@ def _smtp(monkeypatch: pytest.MonkeyPatch) -> list[EmailMessage]:
 
     monkeypatch.setattr("pulseguard.notifiers.email_notifier.smtplib.SMTP", _Client)
     return sent
+
+
+class _Clock:
+    """A UTC clock the engine reads, so a test can cross an interval without sleeping."""
+
+    def __init__(self) -> None:
+        self.now = utc_now()
+
+    def __call__(self) -> object:
+        """Return the current test time."""
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        """Move forward by ``seconds``."""
+        self.now = self.now + timedelta(seconds=seconds)
+
+
+def _messages(database: Path, name: str) -> list[str]:
+    """Return stored result messages, oldest first."""
+    with SqliteRepository(database) as repo:
+        return [item.message for item in repo.results_for(name)]
+
+
+def _stale_count(database: Path, name: str) -> int:
+    """Return how many missed-report rows are stored."""
+    return sum(item == STALE_MESSAGE for item in _messages(database, name))
+
+
+def _interval(database: Path, name: str) -> int:
+    """Return the monitor's expected interval."""
+    record = _monitor(database, name)
+    assert record is not None
+    return record.interval_seconds
+
+
+def _incidents(database: Path, name: str) -> list[object]:
+    """Return every incident row for one monitor."""
+    with SqliteRepository(database) as repo:
+        return [row for row in repo.incidents() if row.monitor == name]
+
+
+def _subjects(sent: list[EmailMessage], needle: str) -> list[str]:
+    """Return subjects that contain ``needle``."""
+    return [str(item["Subject"]) for item in sent if needle in str(item["Subject"])]
+
+
+def _sign_in(database: Path) -> object:
+    """Create the first account on ``database`` and return a signed-in client."""
+    client = _app(database).test_client()
+    setup = client.get("/setup")
+    token = _csrf(setup.get_data(as_text=True))
+    client.post("/setup", data={"csrf_token": token, "username": "ada", "password": "long-enough"})
+    login = client.get("/login")
+    token = _csrf(login.get_data(as_text=True))
+    client.post("/login", data={"csrf_token": token, "username": "ada", "password": "long-enough"})
+    return client
 
 
 def _monitor(database: Path, name: str) -> MonitorRecord | None:
