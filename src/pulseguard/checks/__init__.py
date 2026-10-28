@@ -1,5 +1,6 @@
 """Built-in checks. Importing this package registers them with ``CheckMeta``."""
 
+from pulseguard.checks.agent_check import AgentCheck
 from pulseguard.checks.base import BaseCheck, CheckMeta, build_check
 from pulseguard.checks.defacement import DefacementCheck
 from pulseguard.checks.dns_check import DnsCheck
@@ -12,6 +13,7 @@ from pulseguard.checks.tcp_check import TcpCheck
 from pulseguard.checks.tls_check import TlsExpiryCheck
 
 __all__ = [
+    "AgentCheck",
     "AlertThresholdMixin",
     "BaseCheck",
     "CheckMeta",

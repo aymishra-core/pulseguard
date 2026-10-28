@@ -51,7 +51,10 @@ class MonitorRecord:
         """Reject a row the catalog cannot store."""
         require_monitor_name(self.name)
         require_kind(self.kind)
-        require_target(self.target)
+        if self.kind == "agent":
+            _require_optional_target(self.target)
+        else:
+            require_target(self.target)
         require_interval(self.interval_seconds)
         require_enabled(self.enabled)
 
@@ -115,6 +118,15 @@ def require_kind(kind: object) -> str:
     if kind not in CheckMeta.registry:
         raise ConfigValidationError(f"unknown check kind {kind!r}")
     return kind
+
+
+def _require_optional_target(target: object) -> str:
+    """Allow an empty target for a passive agent monitor."""
+    if not isinstance(target, str) or target != target.strip():
+        raise ConfigValidationError("target must be a string without surrounding space")
+    if len(target) > MAX_TARGET_LENGTH:
+        raise ConfigValidationError(f"target must be at most {MAX_TARGET_LENGTH} characters")
+    return target
 
 
 def require_target(target: object) -> str:

@@ -2,7 +2,7 @@
 {% block title %}{{ record.name }}{% endblock %}
 {% block crumb %}<a href="{{ url_for('monitor_list') }}">Monitors</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('monitor_detail', name=record.name) }}">{{ record.name }}</a>{% endblock %}
 {% block page %}
-{% set icon = {'http':'globe','keyword':'search','defacement':'eye','tcp':'plug','dns':'at','tls':'shield','heartbeat':'heart'}.get(record.kind, 'pulse') %}
+{% set icon = {'http':'globe','keyword':'search','defacement':'eye','tcp':'plug','dns':'at','tls':'shield','heartbeat':'heart','agent':'server'}.get(record.kind, 'pulse') %}
 {% set ordered = nav_items|sort(attribute='name') %}
 {% set ns = namespace(i=0) %}
 {% for item in ordered %}{% if item.name == record.name %}{% set ns.i = loop.index0 %}{% endif %}{% endfor %}
@@ -18,7 +18,7 @@
 <div class="dhead">
 <span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#{{ icon }}"/></svg></span>
 <div class="grow">
-<div class="eyebrow">{{ record.kind }} · {% if record.kind == 'heartbeat' %}token hidden{% else %}{{ record.target }}{% endif %} · every {{ record.interval_seconds }} s</div>
+<div class="eyebrow">{{ record.kind }}{% if record.kind == 'heartbeat' %} · token hidden{% elif record.target %} · {{ record.target }}{% endif %} · every {{ record.interval_seconds }} s</div>
 <h1 class="title">{{ record.name }}</h1>
 <p class="sub">{{ plain }}</p>
 </div>

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.8 - 2026-10-29
+
+An accepted `pulseguard push` creates a passive monitor of kind agent. The dashboard, sidebar, monitors list, and detail page show it with the other monitors. Each push is a normal check result, so history, the 24 h bar, uptime, SLA, and the live check log include it. Three failures open an incident and send the email alert. One success resolves it, and Depends on still suppresses a failure. Silence longer than three expected intervals records "no report from agent" and opens an incident. The Agents page links to the monitor. Deleting an agent asks whether to keep that history.
+
 ## 1.3.7 - 2026-10-29
 
 The Agents page asks for a name, generates a token, and shows the `pulseguard push` command that machine should run. The token stays masked until Reveal. Each agent shows Never seen, Seen N s ago, or Stale, plus its last result. Send a test result uses the collector. Rejected attempts stay on the page with the reason.

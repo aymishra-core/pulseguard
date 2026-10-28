@@ -36,10 +36,12 @@ from pulseguard.agent.roster import (
     add_agent,
     agent_name,
     describe_agents,
+    ensure_agent_monitor,
     load_agents,
     masked_command,
     push_command,
     remember_rejection,
+    remove_agent,
     touch_seen,
 )
 from pulseguard.checks.base import build_check
@@ -114,6 +116,7 @@ _ICONS = {
     "dns": "at",
     "tls": "shield",
     "heartbeat": "heart",
+    "agent": "server",
 }
 _BAR = {"up": "o", "down": "x", "gap": "g", "empty": "g"}
 _NAV = {
@@ -684,6 +687,32 @@ def register_pages(app: Flask) -> None:
             _flash(str(exc), "bad")
             return redirect(url_for("agents"))
         _flash("Test result sent")
+        return redirect(url_for("agents"))
+
+    @app.post("/agents/delete")
+    def agent_delete() -> str | RedirectResponse | tuple[str, int]:
+        denied = _guard()
+        if denied is not None:
+            return denied
+        history = request.form.get("history", "")
+        try:
+            name = agent_name(request.form.get("name", ""))
+        except ConfigValidationError as exc:
+            _flash(str(exc), "bad")
+            return redirect(url_for("agents"))
+        if history not in {"keep", "delete"}:
+            _flash("Choose whether to keep or delete the history.", "bad")
+            return redirect(url_for("agents"))
+        with _repository() as repo:
+            if history == "delete":
+                repo.delete_history(name)
+                repo.delete_monitor(name)
+                repo.delete_monitor_details(name)
+            remove_agent(repo, name)
+        if history == "delete":
+            _flash("Agent removed. Its monitor and history are deleted.")
+        else:
+            _flash("Agent removed. The monitor and its history stay.")
         return redirect(url_for("agents"))
 
     @app.post("/agents/token")
@@ -1423,6 +1452,10 @@ def _rows(repo: Any) -> list[dict[str, object]]:
 
 def _run_check(name: str) -> str:
     """Run one monitor now. The scheduler stores the row when it is running."""
+    with _repository() as repo:
+        record = _find(repo, name)
+        if record is not None and record.kind == "agent":
+            raise ConfigValidationError("This monitor updates when the agent pushes a result.")
     engine = current_app.config.get("ENGINE")
     if engine is not None:
         message = engine.run_now(name)
@@ -1608,6 +1641,7 @@ def _send_test_result(name: str) -> None:
         from pulseguard.storage import SqliteRepository
 
         with SqliteRepository(database) as repo:
+            ensure_agent_monitor(repo, item.monitor)
             repo.add_result(item)
             touch_seen(repo, item.monitor, item.checked_at)
 

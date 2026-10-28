@@ -529,3 +529,5 @@ a.brand:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-
 .cmd code{display:block;margin:12px 0;padding:14px 16px;border-radius:10px;background:var(--inset);border:1px solid var(--line-2);font:400 12.5px/1.65 var(--mono);white-space:pre-wrap;overflow-x:auto}
 .agent{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-top:1px solid var(--line)}
 .agent .grow{flex:1;min-width:0}
+.agent-del{margin-top:8px}
+.agent-del summary{cursor:pointer;width:max-content}

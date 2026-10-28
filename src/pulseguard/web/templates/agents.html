@@ -3,7 +3,7 @@
 {% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Agents</span>{% endblock %}
 {% block page %}
 <div class="head">
-<div><div class="eyebrow">System</div><h1 class="title">Agents</h1><p class="sub">Add an agent, copy the command, and run it on the other machine.</p></div>
+<div><div class="eyebrow">System</div><h1 class="title">Agents</h1><p class="sub">Add an agent, copy the command, and run it on the other machine. An accepted push is a monitor with the same name.</p></div>
 <form method="post" action="{{ url_for('agent_add') }}" class="row-act">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="field"><label for="agent-name">Name</label><input id="agent-name" name="name" autocomplete="off" required></div>
@@ -31,7 +31,11 @@
 <b>{{ row.name }}</b>
 <div class="hint">Expected every {{ row.interval }} s</div>
 <div class="hint">Last result: {{ row.message }}</div>
-{% if row.registered %}<form method="post" action="{{ url_for('agent_test') }}" class="row-act"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit">Send a test result</button></form>{% endif %}
+<div class="row-act">
+<a class="btn btn-sm" href="{{ url_for('monitor_detail', name=row.name) }}">Open monitor</a>
+{% if row.registered %}<form method="post" action="{{ url_for('agent_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit">Send a test result</button></form>{% endif %}
+</div>
+{% if row.registered %}<details class="agent-del"><summary>Delete</summary><p class="hint">Keep the monitor and its history, or delete both?</p><form method="post" action="{{ url_for('agent_delete') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit" name="history" value="keep">Keep history</button><button class="btn btn-sm btn-ghost" type="submit" name="history" value="delete">Delete history</button></form></details>{% endif %}
 </div>
 <span class="pill {{ row.tone }}">{{ row.label }}</span>
 </div>

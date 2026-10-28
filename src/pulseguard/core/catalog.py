@@ -47,6 +47,8 @@ def checks_from_catalog(
         depends = extra.get("depends_on", ())
         if isinstance(depends, list):
             edges[record.name] = tuple(str(item) for item in depends if isinstance(item, str))
+        if record.kind == "agent":
+            continue
         spec = _spec(record, extra)
         signature = json.dumps(spec, sort_keys=True, default=str)
         previous = kept.get(record.name)

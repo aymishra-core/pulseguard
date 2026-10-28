@@ -251,6 +251,13 @@ class SqlRepository(Repository):
         self._change(f"DELETE FROM heartbeat_pings WHERE monitor = {self._mark}", (chosen,))
         self._commit_if_needed()
 
+    def delete_history(self, name: str) -> None:
+        """Delete stored results and incidents for one monitor. The catalog row stays."""
+        chosen = require_monitor_name(name)
+        self._change(f"DELETE FROM results WHERE monitor = {self._mark}", (chosen,))
+        self._change(f"DELETE FROM incidents WHERE monitor = {self._mark}", (chosen,))
+        self._commit_if_needed()
+
     def delete_monitor(self, name: str) -> bool:
         """Delete a catalog row and leave its results stored."""
         chosen = require_monitor_name(name)

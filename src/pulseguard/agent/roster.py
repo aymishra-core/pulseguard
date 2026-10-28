@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pulseguard.agent.protocol import require_token
+from pulseguard.checks.base import MAX_INTERVAL_SECONDS, MIN_INTERVAL_SECONDS
 from pulseguard.exceptions import ConfigValidationError
 
 DEFAULT_INTERVAL = 60
@@ -53,6 +54,55 @@ def load_agents(raw: str | None) -> list[dict[str, Any]]:
         seconds = interval if isinstance(interval, int) and interval > 0 else DEFAULT_INTERVAL
         rows.append({"name": name, "token": token, "interval": seconds})
     return rows
+
+
+def expected_interval(repo: Any, name: str) -> int:
+    """Return the stored interval for this agent, or the default."""
+    seconds = DEFAULT_INTERVAL
+    raw = repo.get_setting("agents") if hasattr(repo, "get_setting") else None
+    for row in load_agents(raw if isinstance(raw, str) else None):
+        if row["name"] == name:
+            seconds = int(row["interval"])
+            break
+    low = int(MIN_INTERVAL_SECONDS)
+    high = int(MAX_INTERVAL_SECONDS)
+    if seconds < low:
+        return low
+    if seconds > high:
+        return high
+    return seconds
+
+
+def ensure_agent_monitor(repo: Any, name: str) -> None:
+    """Create or refresh the passive monitor for one accepted push."""
+    from pulseguard.storage.records import MonitorRecord, require_monitor_name
+
+    chosen = require_monitor_name(name)
+    seconds = expected_interval(repo, chosen)
+    current = next((item for item in repo.monitors() if item.name == chosen), None)
+    if (
+        current is not None
+        and current.kind == "agent"
+        and current.target == ""
+        and current.interval_seconds == seconds
+    ):
+        return
+    enabled = True if current is None else bool(current.enabled)
+    repo.save_monitor(MonitorRecord(chosen, "agent", "", seconds, enabled))
+
+
+def remove_agent(repo: Any, name: str) -> None:
+    """Drop one agent and its seen time. A matching legacy token is replaced."""
+    chosen = agent_name(name)
+    rows = load_agents(repo.get_setting("agents"))
+    removed = next((row for row in rows if row["name"] == chosen), None)
+    kept = [row for row in rows if row["name"] != chosen]
+    repo.set_setting("agents", json.dumps(kept, sort_keys=True))
+    if removed is not None and repo.get_setting("agent_token") == removed["token"]:
+        repo.set_setting("agent_token", str(kept[0]["token"]) if kept else "")
+    seen = _seen_map(repo.get_setting("agent_seen"))
+    seen.pop(chosen, None)
+    repo.set_setting("agent_seen", json.dumps(seen, sort_keys=True)[:2048])
 
 
 def add_agent(repo: Any, name: str, token: str) -> None:

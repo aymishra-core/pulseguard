@@ -14,7 +14,7 @@
 <a data-tab="down" data-tab-style="word" href="{{ url_for('monitor_list', status='down', sort=list_sort) if list_sort else url_for('monitor_list', status='down') }}" aria-selected="{{ 'true' if list_status == 'down' else 'false' }}">{{ view.tabs.down }}</a>
 </div>
 <div class="search"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" data-search="#mons" placeholder="Search name or target…" aria-label="Search"></div>
-<select aria-label="Kind" data-kind-filter><option value="all">All kinds</option>{% for kind in ['http','keyword','defacement','tcp','dns','tls','heartbeat'] %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select>
+<select aria-label="Kind" data-kind-filter><option value="all">All kinds</option>{% for kind in ['http','keyword','defacement','tcp','dns','tls','heartbeat','agent'] %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select>
 </div>
 {% if empty %}
 <section class="card"><div class="empty"><b>No monitors yet</b><p>Add your first monitor to start checking.</p><a class="btn btn-primary" href="{{ url_for('monitor_new') }}">Add monitor</a></div></section>
