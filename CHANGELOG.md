@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.7 - 2026-10-29
+
+The Agents page asks for a name, generates a token, and shows the `pulseguard push` command that machine should run. The token stays masked until Reveal. Each agent shows Never seen, Seen N s ago, or Stale, plus its last result. Send a test result uses the collector. Rejected attempts stay on the page with the reason.
+
 ## 1.3.6 - 2026-10-29
 
 A live refresh paints the status ring, the failing banner, the hero buttons, the subline, the filter counts, and the monitor pills from the same payload as the first page. The banner and the top-bar chip update on every signed-in page. A reload and a live update draw the same nodes.

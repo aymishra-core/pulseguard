@@ -13,6 +13,7 @@ import json
 import re
 import socket
 import struct
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -89,7 +90,7 @@ def read_message(sock: socket.socket) -> Frame:
     return Frame(msg_type, payload)
 
 
-def decode_result(payload: bytes, token: str) -> CheckResult:
+def decode_result(payload: bytes, token: str | Sequence[str]) -> CheckResult:
     """Return the result when the token matches. The token is not returned."""
     try:
         data = json.loads(payload)
@@ -98,14 +99,17 @@ def decode_result(payload: bytes, token: str) -> CheckResult:
     if not isinstance(data, dict):
         raise ProtocolError("result rejected")
     supplied = data.get("token")
-    if not isinstance(supplied, str) or not _token_matches(supplied, token):
+    expected = (token,) if isinstance(token, str) else tuple(token)
+    if not isinstance(supplied, str) or not _any_token(supplied, expected):
         raise ProtocolError("agent token rejected")
     raw = data.get("result")
     if not isinstance(raw, dict):
         raise ProtocolError("result rejected")
     try:
         return _result_from_json(raw)
-    except (ConfigValidationError, ProtocolError, TypeError, ValueError) as exc:
+    except ProtocolError:
+        raise
+    except (ConfigValidationError, TypeError, ValueError) as exc:
         raise ProtocolError("result rejected") from exc
 
 
@@ -180,6 +184,11 @@ def _require_status(value: object) -> int | None:
     return value
 
 
+def _any_token(supplied: str, expected: tuple[str, ...]) -> bool:
+    """Return True when one stored token matches. The secret is not logged."""
+    return any(isinstance(item, str) and _token_matches(supplied, item) for item in expected)
+
+
 def _token_matches(supplied: str, expected: str) -> bool:
     """Compare tokens without branching on the secret's contents."""
     if len(supplied) != len(expected):
@@ -225,10 +234,10 @@ def _result_from_json(raw: dict[str, object]) -> CheckResult:
         raise ProtocolError("result rejected")
     if latency < 0 or latency > MAX_LATENCY_MS:
         raise ProtocolError("result rejected")
-    if not isinstance(message, str) or not message or len(message) > MAX_STORED_MESSAGE_LENGTH:
+    if not isinstance(message, str) or not message or any(char in message for char in "\r\n"):
         raise ProtocolError("result rejected")
-    if any(char in message for char in "\r\n"):
-        raise ProtocolError("result rejected")
+    if len(message) > MAX_STORED_MESSAGE_LENGTH:
+        raise ProtocolError("message is too long")
     if not isinstance(severity, str):
         raise ProtocolError("result rejected")
     if not isinstance(checked_at, str):

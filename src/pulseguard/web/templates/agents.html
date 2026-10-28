@@ -2,23 +2,54 @@
 {% block title %}Agents{% endblock %}
 {% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><span>Agents</span>{% endblock %}
 {% block page %}
-<div class="head"><div><div class="eyebrow">System</div><h1 class="title">Agents</h1><p class="sub">Small helpers that push host metrics to the collector.</p></div>
-<form method="post" action="{{ url_for('agent_token') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary" type="submit">New token</button></form>
+<div class="head">
+<div><div class="eyebrow">System</div><h1 class="title">Agents</h1><p class="sub">Add an agent, copy the command, and run it on the other machine.</p></div>
+<form method="post" action="{{ url_for('agent_add') }}" class="row-act">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="field"><label for="agent-name">Name</label><input id="agent-name" name="name" autocomplete="off" required></div>
+<button class="btn btn-primary" type="submit">Add agent</button>
+</form>
 </div>
 {% if error %}<div class="banner" role="alert">{{ error }}</div>{% endif %}
+{% if command %}
+<section class="card card-pad cmd" data-command-box data-masked="{{ masked }}" data-shown="{{ command }}">
+<h3>Run this on the agent machine</h3>
+<code>{{ masked }}</code>
+<div class="row-act">
+<button class="btn btn-sm" type="button" data-reveal aria-pressed="false">Reveal</button>
+<button class="btn btn-sm" type="button" data-copy="{{ command }}">Copy</button>
+</div>
+<p class="hint">The token is read from PULSEGUARD_AGENT_TOKEN. Copy token now. It is not shown again.</p>
+</section>
+{% endif %}
 <section class="card">
 <div class="card-head"><h3>Connected agents</h3></div>
-{% for name, seen in seen %}
-<div class="cert"><span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#server"/></svg></span><div><b>{{ name }}</b><div class="hint">Last push <time datetime="{{ seen }}">{{ clock(seen) }}</time></div></div><span class="pill up">Seen</span></div>
+{% for row in agents %}
+<div class="agent">
+<span class="mon-ico"><svg class="i" aria-hidden="true"><use href="#server"/></svg></span>
+<div class="grow">
+<b>{{ row.name }}</b>
+<div class="hint">Expected every {{ row.interval }} s</div>
+<div class="hint">Last result: {{ row.message }}</div>
+{% if row.registered %}<form method="post" action="{{ url_for('agent_test') }}" class="row-act"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit">Send a test result</button></form>{% endif %}
+</div>
+<span class="pill {{ row.tone }}">{{ row.label }}</span>
+</div>
 {% else %}
-<div class="empty"><b>No agents yet</b><p>A token lets one agent push.</p></div>
+<div class="empty"><b>No agents yet</b><p>Add an agent to get a token and the command to run.</p></div>
+{% endfor %}
+</section>
+<section class="card">
+<div class="card-head"><h3>Rejected</h3></div>
+{% for row in rejected %}
+<div class="agent"><div class="grow"><b>{{ row.reason }}</b><div class="hint"><time datetime="{{ row.at }}">{{ row.when }}</time></div></div></div>
+{% else %}
+<div class="empty"><b>No rejected attempts</b><p>A wrong token, a message that is too long, or a public address shows up here.</p></div>
 {% endfor %}
 </section>
 <section class="card card-pad">
-<h3>Agent token</h3>
-{% if revealed %}<div class="cp"><code>{{ revealed }}</code><button class="btn btn-sm" type="button" data-copy="{{ revealed }}">Copy token</button></div>{% elif has_token %}<p>A token is saved. Generate a new one to copy it. The old value is not shown again.</p><button class="btn btn-sm" type="button" disabled>Copy token</button>{% else %}<p>No token yet.</p>{% endif %}
-<p class="hint">Tokens are 16 to 128 characters. The collector accepts loopback and private addresses only.</p>
-{% if revealed %}<p class="cp"><code>pulseguard push --token {{ revealed }} --collector {{ host }}:{{ port }}</code></p>{% else %}<p class="cp"><code>pulseguard push --token &lt;token&gt; --collector {{ host }}:{{ port }}</code></p>{% endif %}
+<h3>Collector</h3>
+<p class="hint">On the agent machine, run <code>pulseguard push</code> with the host and port saved here. The token comes from PULSEGUARD_AGENT_TOKEN. Tokens are 16 to 128 characters. The collector accepts loopback and private addresses only.</p>
 <form method="post" action="{{ url_for('agents') }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="grid3">
@@ -27,7 +58,7 @@
 <div class="switch-row">
 <button class="switch" type="button" role="switch" aria-checked="{{ 'true' if enabled else 'false' }}" aria-controls="agent-enabled" data-label="Collector" aria-label="Collector"></button>
 <input id="agent-enabled" name="enabled" type="checkbox" value="1" {% if enabled %}checked{% endif %} hidden>
-<div><b>Collector</b><div class="hint">{% if bound %}Listening on {{ bound }}{% else %}Not bound until PulseGuard restarts.{% endif %}</div></div>
+<div><b>Collector</b><div class="hint">{% if bound %}Listening on {{ bound }}{% else %}Saved. Restart PulseGuard to start listening.{% endif %}</div></div>
 </div>
 </div>
 <button class="btn btn-primary" type="submit">Save</button>

@@ -32,12 +32,28 @@ from werkzeug.wrappers import Response as RedirectResponse
 
 from pulseguard import __version__
 from pulseguard.agent.protocol import require_agent_host, require_agent_port, require_token
+from pulseguard.agent.roster import (
+    add_agent,
+    agent_name,
+    describe_agents,
+    load_agents,
+    masked_command,
+    push_command,
+    remember_rejection,
+    touch_seen,
+)
 from pulseguard.checks.base import build_check
 from pulseguard.checks.defacement import DefacementCheck
 from pulseguard.checks.heartbeat import HeartbeatCheck
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.core.incidents import require_streak
-from pulseguard.exceptions import AlertError, ConfigValidationError, PulseGuardError, StorageError
+from pulseguard.exceptions import (
+    AlertError,
+    ConfigValidationError,
+    ProtocolError,
+    PulseGuardError,
+    StorageError,
+)
 from pulseguard.exporters.backup import verify_backup, write_verified_backup
 from pulseguard.exporters.csv_export import (
     read_monitors_csv,
@@ -609,26 +625,66 @@ def register_pages(app: Flask) -> None:
                 return redirect(url_for("agents"))
             except ConfigValidationError as exc:
                 error = str(exc)
-        revealed = session.pop("agent_token_once", "")
+                with _repository() as repo:
+                    remember_rejection(repo, error, utc_now())
+        once = session.pop("agent_token_once", "")
         with _repository() as repo:
-            seen = _agent_seen(repo.get_setting("agent_seen"))
             enabled = repo.get_setting("agent_enabled") == "1"
             host = repo.get_setting("agent_host") or "127.0.0.1"
             port = repo.get_setting("agent_port") or "8791"
-            has_token = bool(repo.get_setting("agent_token"))
+            agents, rejected = describe_agents(
+                repo, utc_now(), lambda name: _latest_result(repo, name)
+            )
+        command, masked = _agent_command(once, host, port)
         engine = current_app.config.get("ENGINE")
         bound = engine.agent_port if engine is not None else None
         return _page(
             "agents.html",
             error=error,
-            revealed=revealed if isinstance(revealed, str) else "",
-            seen=seen,
+            command=command,
+            masked=masked,
+            agents=agents,
+            rejected=[
+                {"reason": row["reason"], "when": clock(row["at"]), "at": row["at"]}
+                for row in rejected
+            ],
             enabled=enabled,
             host=host,
             port=port,
-            has_token=has_token,
             bound=bound,
         )
+
+    @app.post("/agents/add")
+    def agent_add() -> str | RedirectResponse | tuple[str, int]:
+        denied = _guard()
+        if denied is not None:
+            return denied
+        try:
+            name = agent_name(request.form.get("name", ""))
+            token = require_token(HeartbeatCheck.new_token())
+            with _repository() as repo:
+                add_agent(repo, name, token)
+        except ConfigValidationError as exc:
+            _flash(str(exc), "bad")
+            return redirect(url_for("agents"))
+        session["agent_token_once"] = json.dumps({"name": name, "token": token})
+        _flash("Agent added. Copy the command now. The token is not shown again.")
+        return redirect(url_for("agents"))
+
+    @app.post("/agents/test")
+    def agent_test() -> str | RedirectResponse | tuple[str, int]:
+        denied = _guard()
+        if denied is not None:
+            return denied
+        try:
+            _send_test_result(agent_name(request.form.get("name", "")))
+        except (ConfigValidationError, ProtocolError) as exc:
+            with _repository() as repo:
+                remember_rejection(repo, str(exc), utc_now())
+            _flash(str(exc), "bad")
+            return redirect(url_for("agents"))
+        _flash("Test result sent")
+        return redirect(url_for("agents"))
 
     @app.post("/agents/token")
     def agent_token() -> str | RedirectResponse | tuple[str, int]:
@@ -1487,6 +1543,81 @@ def _sla_text() -> str:
     if successes is None or total is None:
         raise ConfigValidationError("success count must be an integer")
     return format_budget(successes, total, target)
+
+
+def _latest_result(repo: Any, name: str) -> str:
+    """Return the newest stored message for one agent, or an empty string."""
+    try:
+        rows = repo.results_for(name)
+    except ConfigValidationError:
+        return ""
+    if not rows:
+        return ""
+    return " ".join(str(rows[-1].message).split())
+
+
+def _agent_command(once: object, host: str, port: str) -> tuple[str, str]:
+    """Return the real push command and the masked copy. A blank session shows neither."""
+    if not isinstance(once, str) or not once:
+        return "", ""
+    name = "agent"
+    token = once
+    try:
+        parsed = json.loads(once)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict) and isinstance(parsed.get("token"), str):
+        token = str(parsed["token"])
+        if isinstance(parsed.get("name"), str):
+            name = str(parsed["name"])
+    try:
+        require_token(token)
+        agent_name(name)
+    except ConfigValidationError:
+        return "", ""
+    return push_command(host, port, name, token), masked_command(host, port, name)
+
+
+def _send_test_result(name: str) -> None:
+    """Push one sample through a collector and store the accepted result."""
+    from queue import Queue
+
+    from pulseguard.agent.client import AgentClient
+    from pulseguard.agent.server import Collector
+
+    with _repository() as repo:
+        match = next(
+            (row for row in load_agents(repo.get_setting("agents")) if row["name"] == name),
+            None,
+        )
+    if match is None:
+        raise ConfigValidationError("unknown agent")
+    token = str(match["token"])
+    database = Path(str(current_app.config["DATABASE"]))
+    result = CheckResult(
+        monitor=name,
+        kind="http",
+        ok=True,
+        latency_ms=0,
+        message="ok",
+        severity=Severity.OK,
+        checked_at=utc_now(),
+    )
+
+    def on_result(item: CheckResult) -> None:
+        from pulseguard.storage import SqliteRepository
+
+        with SqliteRepository(database) as repo:
+            repo.add_result(item)
+            touch_seen(repo, item.monitor, item.checked_at)
+
+    collector = Collector("127.0.0.1", 0, token, Queue(), on_result=on_result)
+    try:
+        collector.start()
+        with AgentClient("127.0.0.1", collector.port, token) as client:
+            client.send(result)
+    finally:
+        collector.stop()
 
 
 def _save_agent() -> None:

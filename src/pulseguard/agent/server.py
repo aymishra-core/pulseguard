@@ -9,7 +9,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from queue import Full, Queue
 from threading import BoundedSemaphore, Event, Lock, Thread
 
@@ -47,11 +47,18 @@ class Collector:
         max_clients: int = MAX_CLIENTS,
         timeout: float = FRAME_TIMEOUT_SECONDS,
         on_result: Callable[[CheckResult], None] | None = None,
+        tokens: Sequence[str] | None = None,
+        on_reject: Callable[[str], None] | None = None,
     ) -> None:
         """Validate the bind address. The socket opens in ``start``."""
         self._host = require_agent_host(host)
         self._port = require_agent_port(port, allow_ephemeral=True)
-        self._token = require_token(token)
+        accepted = [require_token(token)]
+        for item in tokens or ():
+            chosen = require_token(item)
+            if chosen not in accepted:
+                accepted.append(chosen)
+        self._tokens = tuple(accepted)
         self._results = results
         self._timeout = timeout
         self._max_clients = _require_clients(max_clients)
@@ -63,6 +70,7 @@ class Collector:
         self._children: list[Thread] = []
         self._live: set[socket.socket] = set()
         self._on_result = on_result
+        self._on_reject = on_reject
         self.port = port
 
     @property
@@ -152,7 +160,7 @@ class Collector:
             frame = read_message(conn)
             if frame.msg_type != RESULT:
                 raise ProtocolError("bad type")
-            result = decode_result(frame.payload, self._token)
+            result = decode_result(frame.payload, self._tokens)
             try:
                 self._results.put_nowait(result)
             except Full:
@@ -165,6 +173,8 @@ class Collector:
                 self._on_result(result)
         except ProtocolError as exc:
             LOGGER.warning("agent frame rejected reason=%s", exc)
+            if self._on_reject is not None:
+                self._on_reject(str(exc))
             self._refuse(conn)
         except OSError:
             LOGGER.warning("agent frame rejected reason=socket")

@@ -370,13 +370,18 @@ class Engine:
             return
         from pulseguard.agent.server import Collector
 
+        parts = [part for part in token.split("\n") if part]
+        if not parts:
+            return
         try:
             self._collector = Collector(
                 host,
                 port,
-                token,
+                parts[0],
                 self._results,
                 on_result=self._note_agent,
+                tokens=parts[1:],
+                on_reject=self._note_reject,
             )
             self._collector.start()
         except Exception:
@@ -407,6 +412,18 @@ class Engine:
                 "%Y-%m-%dT%H:%M:%S+00:00"
             )
             setter("agent_seen", json.dumps(seen, sort_keys=True)[:2048])
+        finally:
+            repo.close()
+
+    def _note_reject(self, reason: str) -> None:
+        """Remember one refused agent frame. The reason does not include the token."""
+        if self._factory is None:
+            return
+        from pulseguard.agent.roster import remember_rejection
+
+        repo = self._factory()
+        try:
+            remember_rejection(repo, reason, utc_now())
         finally:
             repo.close()
 
@@ -724,8 +741,9 @@ def _agent_settings(repository: Repository) -> tuple[bool, str, int, str]:
     getter = getattr(repository, "get_setting", None)
     if not callable(getter):
         return False, "127.0.0.1", 8791, ""
+    from pulseguard.agent.roster import collector_tokens
+
     enabled = getter("agent_enabled") == "1"
-    token = getter("agent_token")
     host = getter("agent_host")
     port_text = getter("agent_port")
     port = int(port_text) if isinstance(port_text, str) and port_text.isdigit() else 8791
@@ -733,7 +751,7 @@ def _agent_settings(repository: Repository) -> tuple[bool, str, int, str]:
         enabled,
         host if isinstance(host, str) and host else "127.0.0.1",
         port,
-        token if isinstance(token, str) else "",
+        collector_tokens(getter),
     )
 
 

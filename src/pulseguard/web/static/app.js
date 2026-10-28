@@ -29,6 +29,7 @@ window.pgToast=toast;
 /* copy */
 document.addEventListener("click",function(e){var b=e.target.closest("[data-copy]");if(!b)return;var v=b.getAttribute("data-copy");
   if(navigator.clipboard)navigator.clipboard.writeText(v).catch(function(){});toast("ok","Copied to clipboard")});
+document.addEventListener("click",function(e){var button=e.target.closest("[data-reveal]");if(!button)return;var box=button.closest("[data-command-box]");var code=box&&box.querySelector("code");if(!code)return;var open=button.getAttribute("aria-pressed")==="true";code.textContent=open?(box.getAttribute("data-masked")||""):(box.getAttribute("data-shown")||"");button.setAttribute("aria-pressed",open?"false":"true");button.textContent=open?"Reveal":"Hide"});
 
 /* count up */
 function countUp(n){var to=parseFloat(n.getAttribute("data-count")),dec=+(n.getAttribute("data-dec")||0),suf=n.getAttribute("data-suf")||"";
