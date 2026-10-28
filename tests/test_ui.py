@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ import pytest
 from pulseguard.checks.models import CheckResult, Severity, utc_now
 from pulseguard.core.engine import Engine
 from pulseguard.notifiers.settings_notifier import DatabaseNotifier
-from pulseguard.storage import SqliteRepository
+from pulseguard.storage import MonitorRecord, SqliteRepository
 from pulseguard.web.app import create_app
 
 _PASSWORD = "s3cret-password"
@@ -930,6 +931,75 @@ def test_defacement_baseline_is_typed_or_learned(tmp_path: Path) -> None:
         ),
     )
     assert b"expected_sha256" in manual.data
+
+
+def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
+    """The hero ring is red, amber, grey, or green for the current state."""
+    client, database = _login(tmp_path)
+    moment = datetime(2026, 10, 28, 8, 0, tzinfo=UTC)
+
+    def store(
+        result: CheckResult | None = None, *, enabled: bool = True, incident: bool = False
+    ) -> None:
+        with SqliteRepository(database) as repo:
+            repo.save_monitor(MonitorRecord("web", "http", "http://127.0.0.1/", 30, enabled))
+            if result is not None:
+                repo.add_result(result)
+            if incident:
+                repo.open_incident("web", moment, "connection refused", "http")
+            elif repo.incidents(state="open"):
+                repo.resolve_incident("web", moment)
+
+    def ring() -> tuple[str, str]:
+        html = client.get("/dashboard").get_data(as_text=True)
+        match = re.search(
+            r'class="ring ([a-z]+)" id="hero-ring"[\s\S]*?href="(#[^"]+)"',
+            html,
+        )
+        assert match is not None
+        return match.group(1), match.group(2)
+
+    store(CheckResult("web", "http", True, 12, "HTTP 200", Severity.OK, moment))
+    assert ring() == ("up", "#i-check")
+    store(
+        CheckResult(
+            "web",
+            "http",
+            True,
+            20,
+            "certificate expires soon",
+            Severity.WARNING,
+            moment + timedelta(minutes=1),
+        )
+    )
+    assert ring() == ("warn", "#i-alert")
+    store(
+        CheckResult(
+            "web", "http", True, 0, "monitoring gap", Severity.INFO, moment + timedelta(minutes=2)
+        )
+    )
+    assert ring() == ("warn", "#i-alert")
+    store(
+        CheckResult(
+            "web",
+            "http",
+            False,
+            30,
+            "connection refused",
+            Severity.CRITICAL,
+            moment + timedelta(minutes=3),
+        )
+    )
+    assert ring() == ("down", "#i-alert")
+    store(
+        CheckResult(
+            "web", "http", True, 11, "HTTP 200", Severity.OK, moment + timedelta(minutes=4)
+        ),
+        incident=True,
+    )
+    assert ring() == ("down", "#i-alert")
+    store(enabled=False)
+    assert ring() == ("paused", "#i-pause")
 
 
 def _login(tmp_path: Path):

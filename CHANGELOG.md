@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2 - 2026-10-28
+
+Links follow one rule. A name inherits the text colour at weight 600 and shows the accent underline only on hover or keyboard focus. A link in a sentence uses the accent colour with an underline offset. The hero ring is red when an incident is open or a monitor is down, amber for a gap or a warning, grey when every monitor is paused, and green only when every monitor is up.
+
+- The six summary tiles share one row and the same height. Each sparkline sits on the same baseline.
+- The activity feed is a timeline: a state dot, one line of text, and a relative time that stays on that line.
+
 ## 1.2.1 - 2026-10-28
 
 Visible times use one server helper and one browser helper. A person sees "Today 11:05", "yesterday 7:28 pm", "12 s ago", or "21h 3m", with the exact local time on the tooltip. Machine-readable values stay on `<time datetime>`. Latency is a whole number of milliseconds.

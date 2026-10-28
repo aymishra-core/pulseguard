@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 from markupsafe import Markup
 
-from pulseguard.checks.models import CheckResult
+from pulseguard.checks.models import CheckResult, Severity
 from pulseguard.storage.records import MonitorRecord
 
 _DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
@@ -146,6 +146,37 @@ def monitor_state(record: MonitorRecord, result: CheckResult | None) -> str:
     if result is None:
         return "unknown"
     return "up" if result.ok else "down"
+
+
+def ring_state(
+    records: list[MonitorRecord],
+    latest: dict[str, CheckResult],
+    open_incidents: int,
+) -> str:
+    """Return the hero ring: down, warn, paused, or up.
+
+    Red when an incident is open or any monitor is down. Amber for a gap,
+    a warning that is still up, or anything that is not a clean success.
+    Grey only when every monitor is paused. Green only when every monitor is up.
+    """
+    states = [monitor_state(record, latest.get(record.name)) for record in records]
+    if open_incidents or "down" in states:
+        return "down"
+    for record in records:
+        result = latest.get(record.name)
+        if result is None:
+            continue
+        if result.message == "monitoring gap":
+            return "warn"
+        if result.ok and result.severity >= Severity.WARNING:
+            return "warn"
+    if "unknown" in states or not states:
+        return "warn"
+    if all(item == "paused" for item in states):
+        return "paused"
+    if all(item == "up" for item in states):
+        return "up"
+    return "warn"
 
 
 def days_remaining(message: str, now: datetime) -> int | None:

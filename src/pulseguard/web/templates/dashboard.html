@@ -3,8 +3,8 @@
 {% block crumb %}Dashboard{% endblock %}
 {% block body %}
 <section class="hero" id="hero" aria-live="polite">
-  <div class="ring {{ dot }}" id="hero-ring">
-    <svg class="icon" aria-hidden="true"><use href="{% if dot == 'down' %}#i-alert{% elif dot == 'paused' %}#i-pause{% else %}#i-check{% endif %}"/></svg>
+  <div class="ring {{ ring }}" id="hero-ring">
+    <svg class="icon" aria-hidden="true"><use href="{% if ring == 'up' %}#i-check{% elif ring == 'paused' %}#i-pause{% else %}#i-alert{% endif %}"/></svg>
   </div>
   <div>
     {% if open_incidents %}
@@ -40,12 +40,12 @@
   <button type="button" id="hide-onboarding" class="icon-btn" aria-label="Hide checklist">×</button>
 </section>
 <section class="summary" aria-label="Summary">
-  <article class="stat"><h2>Up</h2><p class="metric" data-count="{{ counts.up }}">{{ counts.up }}</p>{{ sparkline(trend_up) }}</article>
-  <article class="stat"><h2>Down</h2><p class="metric" data-count="{{ counts.down }}">{{ counts.down }}</p>{{ sparkline(trend_down) }}</article>
-  <article class="stat"><h2>Unknown</h2><p class="metric" data-count="{{ counts.unknown }}">{{ counts.unknown }}</p></article>
-  <article class="stat"><h2>Open incidents</h2><p class="metric" data-count="{{ open_incidents }}">{{ open_incidents }}</p></article>
-  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric" data-count="{{ certs }}">{{ certs }}</p></article>
-  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p>{{ sparkline(trend_uptime) }}</article>
+  <article class="stat"><h2>Up</h2><p class="metric" data-count="{{ counts.up }}">{{ counts.up }}</p><div class="spark-slot">{{ sparkline(trend_up) }}</div></article>
+  <article class="stat"><h2>Down</h2><p class="metric" data-count="{{ counts.down }}">{{ counts.down }}</p><div class="spark-slot">{{ sparkline(trend_down) }}</div></article>
+  <article class="stat"><h2>Unknown</h2><p class="metric" data-count="{{ counts.unknown }}">{{ counts.unknown }}</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>Open incidents</h2><p class="metric" data-count="{{ open_incidents }}">{{ open_incidents }}</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric" data-count="{{ certs }}">{{ certs }}</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p><div class="spark-slot">{{ sparkline(trend_uptime) }}</div></article>
 </section>
 <p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
 <div class="filters">
@@ -101,11 +101,15 @@
   </div>
   <aside class="panel" aria-label="Activity">
     <h2>Activity</h2>
-    <ul id="activity">
+    <ul class="activity" id="activity">
       {% for event in activity %}
-      <li><span class="pill {{ event.state }}">{{ event.state }}</span> <time class="when" datetime="{{ event.at }}">{{ clock(event.at) }}</time> {{ event.text }}</li>
+      <li>
+        <span class="state-dot {{ event.state }}" aria-hidden="true"></span>
+        <span class="activity-text">{{ event.text }}</span>
+        <time class="ago" datetime="{{ event.at }}">{{ clock(event.at) }}</time>
+      </li>
       {% else %}
-      <li>No changes yet.</li>
+      <li class="muted">No changes yet.</li>
       {% endfor %}
     </ul>
   </aside>

@@ -3,7 +3,7 @@
 {% block crumb %}{{ record.name }}{% endblock %}
 {% block body %}
 <header class="hero">
-  <div class="ring {{ state }}" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="{% if state == 'down' %}#i-alert{% elif state == 'paused' %}#i-pause{% else %}#i-check{% endif %}"/></svg></div>
+  <div class="ring {% if message == 'monitoring gap' %}warn{% else %}{{ state }}{% endif %}" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="{% if state == 'up' and message != 'monitoring gap' %}#i-check{% elif state == 'paused' %}#i-pause{% else %}#i-alert{% endif %}"/></svg></div>
   <div>
     <h1>{{ record.name }}</h1>
     <p><span class="pill {{ state }}">{{ state }}</span> {{ record.kind }} · {{ state_for }}</p>

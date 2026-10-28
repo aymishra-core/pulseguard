@@ -65,6 +65,7 @@ from pulseguard.web.board import (
     latest_by_name,
     monitor_state,
     plain_message,
+    ring_state,
     segments,
     sparkline,
     stamp,
@@ -937,6 +938,7 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "uptime": _pct(uptime(day)),
         "empty": not records,
         "activity": activity_lines(results),
+        "ring": ring_state(list(records), latest, len(open_rows)),
     }
 
 
@@ -954,6 +956,7 @@ def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
         "incident_since": body.get("incident_since", ""),
         "certs": body["certs"],
         "uptime": body["uptime"],
+        "ring": body.get("ring", "warn"),
         "activity": body.get("activity", []),
         "monitors": cards,
     }

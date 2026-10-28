@@ -18,6 +18,10 @@ Motion durations are `--motion-micro` (120ms), `--motion-standard` (200ms), and 
 
 Layers are `--z-nav` (20), `--z-toast` (40), `--z-palette` (50), and `--z-modal` (60).
 
+## Links
+
+`--link` is the accent colour. `--link-offset` is the gap between the glyphs and the underline. A link in a sentence uses that colour and a 1 px underline. A link that is a name — the sidebar, a card title, the hero title, or a name in a table — inherits the text colour at weight 600. It picks up `--link` and the underline only on hover or keyboard focus. The focus ring stays the accent outline. A control that is a link, such as `.button`, does not use the text-link underline.
+
 ## Components
 
 These classes are the shared controls: `button` / `.btn` (primary), `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.is-loading`, inputs and selects, checkboxes, `.pill`, `.card`, `.stat`, tables, `.segmented`, `.toast`, `.banner`, `.empty`, `.skeleton`, `.progress`, `meter`, `kbd`, `[data-tooltip]`, and `dialog`. The sidebar, top bar, and command palette (`Ctrl` or `Cmd`+`K`) are in `base.html`.

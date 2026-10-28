@@ -669,9 +669,10 @@
     if (headline) headline.textContent = line;
     if (pill) { pill.className = "pill " + dot; pill.textContent = dot; }
     if (ring) {
-      ring.className = "ring " + dot;
+      var ringState = body.ring || (open || down ? "down" : dot);
+      ring.className = "ring " + ringState;
       var glyph = ring.querySelector("use");
-      var iconName = dot === "down" ? "#i-alert" : (dot === "paused" ? "#i-pause" : "#i-check");
+      var iconName = ringState === "up" ? "#i-check" : (ringState === "paused" ? "#i-pause" : "#i-alert");
       if (glyph) glyph.setAttribute("href", iconName);
     }
     if (title) {
@@ -807,15 +808,17 @@
       body.activity.forEach(function (event) {
         var item = document.createElement("li");
         var mark = document.createElement("span");
-        mark.className = "pill " + event.state;
-        mark.textContent = event.state;
+        mark.className = "state-dot " + event.state;
+        mark.setAttribute("aria-hidden", "true");
+        var text = document.createElement("span");
+        text.className = "activity-text";
+        text.textContent = event.text;
         var when = document.createElement("time");
+        when.className = "ago";
         when.setAttribute("datetime", event.at);
-        when.textContent = event.at;
         item.appendChild(mark);
-        item.appendChild(document.createTextNode(" "));
+        item.appendChild(text);
         item.appendChild(when);
-        item.appendChild(document.createTextNode(" " + event.text));
         feed.appendChild(item);
       });
     }
