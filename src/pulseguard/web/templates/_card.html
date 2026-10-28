@@ -5,8 +5,7 @@
 <a class="mon-name" href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a>
 <span class="mon-target" title="{{ card.target }}">{{ card.target }}</span>
 </div>
-{% set pill = 'warn' if card.tone == 'warn' else card.state %}
-<span class="pill {{ pill }}">{% if card.state == 'up' and card.tone == 'warn' %}Expiring{% elif card.state == 'up' %}Up{% elif card.state == 'down' %}Down{% elif card.state == 'paused' %}Paused{% else %}Unknown{% endif %}</span>
+<span class="pill {{ card.pill_class }}">{{ card.pill_label }}</span>
 </div>
 <div class="mon-msg">{{ card.plain }}</div>
 <div class="mon-meta">

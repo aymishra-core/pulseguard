@@ -2,18 +2,16 @@
 {% block title %}Monitors{% endblock %}
 {% block crumb %}<a href="{{ url_for('dashboard') }}">Dashboard</a><svg class="i i-sm" aria-hidden="true"><use href="#chev"/></svg><a href="{{ url_for('monitor_list') }}">Monitors</a>{% endblock %}
 {% block page %}
-{% set total = counts.up + counts.down + counts.unknown + counts.paused %}
-{% set attn = counts.down + warns %}
 <div class="head">
 <div><div class="eyebrow">Monitor</div><h1 class="title">Monitors</h1><p class="sub">Every check PulseGuard runs, with its schedule and latest result.</p></div>
 <div class="actions"><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
 <div class="toolbar">
 <div class="tabs" role="tablist">
-<a href="{{ url_for('monitor_list', sort=list_sort) if list_sort else url_for('monitor_list') }}" aria-selected="{{ 'true' if not list_status else 'false' }}">All {{ total }}</a>
-<a href="{{ url_for('monitor_list', status='attn', sort=list_sort) if list_sort else url_for('monitor_list', status='attn') }}" aria-selected="{{ 'true' if list_status == 'attn' else 'false' }}">Needs attention {{ attn }}</a>
-<a href="{{ url_for('monitor_list', status='up', sort=list_sort) if list_sort else url_for('monitor_list', status='up') }}" aria-selected="{{ 'true' if list_status == 'up' else 'false' }}">Up {{ counts.up }}</a>
-<a href="{{ url_for('monitor_list', status='down', sort=list_sort) if list_sort else url_for('monitor_list', status='down') }}" aria-selected="{{ 'true' if list_status == 'down' else 'false' }}">Down {{ counts.down }}</a>
+<a data-tab="all" href="{{ url_for('monitor_list', sort=list_sort) if list_sort else url_for('monitor_list') }}" aria-selected="{{ 'true' if not list_status else 'false' }}">{{ view.tabs.all }}</a>
+<a data-tab="attn" href="{{ url_for('monitor_list', status='attn', sort=list_sort) if list_sort else url_for('monitor_list', status='attn') }}" aria-selected="{{ 'true' if list_status == 'attn' else 'false' }}">{{ view.tabs.attn }}</a>
+<a data-tab="up" href="{{ url_for('monitor_list', status='up', sort=list_sort) if list_sort else url_for('monitor_list', status='up') }}" aria-selected="{{ 'true' if list_status == 'up' else 'false' }}">{{ view.tabs.up }}</a>
+<a data-tab="down" data-tab-style="word" href="{{ url_for('monitor_list', status='down', sort=list_sort) if list_sort else url_for('monitor_list', status='down') }}" aria-selected="{{ 'true' if list_status == 'down' else 'false' }}">{{ view.tabs.down }}</a>
 </div>
 <div class="search"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" data-search="#mons" placeholder="Search name or target…" aria-label="Search"></div>
 <select aria-label="Kind" data-kind-filter><option value="all">All kinds</option>{% for kind in ['http','keyword','defacement','tcp','dns','tls','heartbeat'] %}<option value="{{ kind }}">{{ kind }}</option>{% endfor %}</select>

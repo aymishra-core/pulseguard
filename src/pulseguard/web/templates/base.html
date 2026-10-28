@@ -53,16 +53,16 @@
 <button class="icon-btn menu-btn" type="button" data-menu aria-label="Menu"><svg class="i" aria-hidden="true"><use href="#menu"/></svg></button>
 <div class="crumb">{% block crumb %}<span>Dashboard</span>{% endblock %}</div>
 <span class="grow"></span>
-<a class="chip {% if nav_failing %}down{% elif nav_incidents %}warn{% elif nav_total and nav_healthy == nav_total %}ok{% else %}warn{% endif %}" href="{% if nav_failing %}{{ chip_href }}{% elif nav_incidents %}{{ url_for('incident_list', status='open') }}{% elif nav_total %}{{ url_for('monitor_list') }}{% else %}{{ url_for('dashboard') }}{% endif %}" id="pg-chip" data-snap="chip"><span class="dot"></span><span class="l" data-snap="chip-label">{% if nav_failing %}{{ nav_failing }} failing{% elif nav_incidents %}{{ nav_incidents }} open{% elif nav_total %}{{ nav_healthy }}/{{ nav_total }} healthy{% else %}Awaiting first sweep{% endif %}</span></a>
+<a class="chip {{ view.chip.tone }}" href="{{ view.chip.href }}" id="pg-chip" data-snap="chip"><span class="dot"></span><span class="l" data-snap="chip-label">{{ view.chip.label }}</span></a>
 <button class="jump" type="button" data-open="pal" aria-label="Search"><svg class="i i-sm" aria-hidden="true"><use href="#search"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button>
 <button class="icon-btn" id="theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme"><svg class="i" aria-hidden="true"><use href="#sun"/></svg></button>
 <a class="avatar" href="{{ url_for('settings') }}" aria-label="Account">{{ user[:2]|upper }}</a>
 </header>
-{% if nav_failing and banner_name %}
-<div class="banner" role="alert">
+{% if view.banner %}
+<div class="banner" role="alert" data-state="banner">
 <svg class="i" aria-hidden="true"><use href="#alert"/></svg>
-<span><a class="banner-name" href="{{ url_for('monitor_detail', name=banner_name) }}">{{ banner_name }}</a> failing{% if banner_plain %}: {{ banner_plain }}{% endif %}</span>
-<a href="{{ url_for('monitor_detail', name=banner_name) }}">Open monitor <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>
+<span><a class="banner-name" href="{{ view.banner.href }}">{{ view.banner.name }}</a> failing{% if view.banner.plain %}: {{ view.banner.plain }}{% endif %}</span>
+<a href="{{ view.banner.href }}">Open monitor <svg class="i i-sm" aria-hidden="true"><use href="#arrow"/></svg></a>
 </div>
 {% endif %}
 <main class="page">

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.6 - 2026-10-29
+
+A live refresh paints the status ring, the failing banner, the hero buttons, the subline, the filter counts, and the monitor pills from the same payload as the first page. The banner and the top-bar chip update on every signed-in page. A reload and a live update draw the same nodes.
+
 ## 1.3.5 - 2026-10-29
 
 The live check log opens with the last 20 completed checks and prepends each new one from the dashboard payload: time, monitor, UP or DOWN, the check message, and the latency. It keeps 50 lines. The badge says streaming only while a refresh has succeeded inside two poll intervals, reconnecting after that, and paused while the tab is hidden.

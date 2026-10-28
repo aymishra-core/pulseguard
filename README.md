@@ -26,7 +26,7 @@ On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**.
 
 PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
 
-Version 1.3.5 fills the live check log from completed checks and keeps its streaming badge honest. Version 1.3.4 asks for a host or a URL to match the check, offers a one-click fix when a URL is pasted into a host field, and picks dependencies as removable chips. Version 1.3.3 draws the dashboard from one snapshot, so the hero and the tiles show the same checks, latency, and open incidents, and the mark links back to the dashboard. Version 1.3.2 names the service state and links each failing monitor, incident, and certificate from the dashboard. Version 1.3.1 closes an incident when its monitor is removed, paused, or disabled, and the dashboard hero follows only monitors that are still running. Version 1.3.0 is the finished console from the design pack: the same sidebar, top bar, incident banner, and page structure, filled with stored monitors and incidents. The type is the pack's system stack. Light and dark follow the system until you toggle them, and the choice is kept as `pg-theme`. A quiet period is a grey "no data" slice, not downtime. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Version 1.3.6 paints every status element from one payload, so a live refresh and a reload show the same ring, banner, buttons, counts, and pills. Version 1.3.5 fills the live check log from completed checks and keeps its streaming badge honest. Version 1.3.4 asks for a host or a URL to match the check, offers a one-click fix when a URL is pasted into a host field, and picks dependencies as removable chips. Version 1.3.3 draws the dashboard from one snapshot, so the hero and the tiles show the same checks, latency, and open incidents, and the mark links back to the dashboard. Version 1.3.2 names the service state and links each failing monitor, incident, and certificate from the dashboard. Version 1.3.1 closes an incident when its monitor is removed, paused, or disabled, and the dashboard hero follows only monitors that are still running. Version 1.3.0 is the finished console from the design pack: the same sidebar, top bar, incident banner, and page structure, filled with stored monitors and incidents. The type is the pack's system stack. Light and dark follow the system until you toggle them, and the choice is kept as `pg-theme`. A quiet period is a grey "no data" slice, not downtime. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -69,6 +69,10 @@ Version 1.3.5 fills the live check log from completed checks and keeps its strea
 ![SLA calculator, dark](docs/screenshots/sla-dark.png)
 
 Live dashboard frames: [1](docs/screenshots/dashboard-live-1.png), [2](docs/screenshots/dashboard-live-2.png), [3](docs/screenshots/dashboard-live-3.png).
+
+## Live updates
+
+Signed-in pages poll `/api/dashboard`. `applyState` paints the banner, the status ring, the headline and subline, the hero buttons, the top-bar chip, the sidebar dots and badges, the KPI tiles, the filter counts, the monitor pills and detail lines, and the last sweep from that one payload. A live update and a reload draw the same nodes. The banner and the chip refresh on Alerts, Incidents, and Monitors as well as the Dashboard.
 
 ## What works now
 

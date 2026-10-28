@@ -1078,6 +1078,7 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
         else:
             line = f"{plain_message(raw).rstrip('.')} · {round(result.latency_ms)} ms"
         labels = segments(mine, now, parts=48)
+        pill_class, pill_label = _pill(state, tone)
         cards.append(
             {
                 "name": record.name,
@@ -1086,6 +1087,8 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
                 "target": target,
                 "state": state,
                 "tone": tone,
+                "pill_class": pill_class,
+                "pill_label": pill_label,
                 "message": raw,
                 "plain": line,
                 "latency": None
@@ -1151,7 +1154,7 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
     mean_ms = mean_successful_ms(day)
     day_start = local_day_start(now, offset_minutes)
     checks_today = sum(1 for item in results if item.checked_at >= day_start)
-    return {
+    snap = {
         "generated_at": now.astimezone(UTC).isoformat(),
         "generated_ms": generated_ms,
         "cards": cards,
@@ -1219,6 +1222,8 @@ def build_snapshot(repo: Any, now: datetime, *, offset_minutes: int = 0) -> dict
             for row in incidents[:20]
         ],
     }
+    snap["view"] = _present(snap)
+    return snap
 
 
 def _dashboard_body(repo: Any) -> dict[str, Any]:
@@ -1698,35 +1703,177 @@ def _history_note(repo: Any, now: datetime) -> str:
     return _note_from(list(repo.incidents()), now)
 
 
-def _shell_from(snap: dict[str, Any]) -> dict[str, object]:
-    """Return the top bar and badges from a snapshot. This does not read the database."""
+def _pill(state: str, tone: str) -> tuple[str, str]:
+    """Return the pill class and label for one monitor card."""
+    css = "warn" if tone == "warn" else state
+    if state == "up" and tone == "warn":
+        label = "Expiring"
+    elif state == "up":
+        label = "Up"
+    elif state == "down":
+        label = "Down"
+    elif state == "paused":
+        label = "Paused"
+    else:
+        label = "Unknown"
+    return css, label
+
+
+def _present(snap: dict[str, Any]) -> dict[str, Any]:
+    """Return the status strings the first paint and applyState both use."""
     counts = snap["counts"]
+    down = int(counts["down"])
+    up = int(counts["up"])
+    total = int(counts["total"])
+    open_count = int(snap["open_incident_count"])
     failing = [item for item in snap["nav_items"] if item["dot"] == "down"]
-    banner_name = failing[0]["name"] if failing else ""
+    banner_name = str(failing[0]["name"]) if failing else ""
     banner_plain = ""
     if banner_name:
         raw = next(card["message"] for card in snap["cards"] if card["name"] == banner_name)
         if raw:
             banner_plain = plain_message(str(raw)).rstrip(".")
-    chip_href = url_for("monitor_list")
-    if counts["down"] == 1 and banner_name:
-        chip_href = url_for("monitor_detail", name=banner_name)
-    elif counts["down"]:
-        chip_href = url_for("monitor_list", status="down")
+    banner = None
+    if down and banner_name:
+        banner = {
+            "name": banner_name,
+            "plain": banner_plain,
+            "href": f"/monitors/{banner_name}/view",
+        }
+    hero_name = str(snap["hero_name"] or "")
+    if hero_name:
+        subline = {
+            "kind": "named",
+            "name": hero_name,
+            "href": f"/monitors/{hero_name}/view",
+            "plain": str(snap["hero_plain"] or ""),
+        }
+    elif snap["empty"]:
+        subline = {"kind": "empty", "name": "", "href": "", "plain": ""}
+    else:
+        subline = {"kind": "none", "name": "", "href": "", "plain": ""}
+    actions: list[dict[str, str]] = []
+    if down == 1 and hero_name:
+        actions.append(
+            {
+                "class": "btn btn-danger",
+                "href": f"/monitors/{hero_name}/view",
+                "label": "Open monitor",
+            }
+        )
+    elif down > 1:
+        actions.append(
+            {
+                "class": "btn btn-danger",
+                "href": "/monitors?status=down",
+                "label": f"View {down} failing",
+            }
+        )
+    elif snap["empty"]:
+        actions.append(
+            {"class": "btn btn-primary", "href": "/monitors/new", "label": "Add monitor"}
+        )
+    incident_id = snap["incident_id"]
+    if incident_id:
+        actions.append(
+            {
+                "class": "btn btn-ghost",
+                "href": f"/incidents/{incident_id}",
+                "label": "Open incident",
+            }
+        )
+    if down == 1 and banner_name:
+        chip_href = f"/monitors/{banner_name}/view"
+    elif down:
+        chip_href = "/monitors?status=down"
+    elif open_count:
+        chip_href = "/incidents?status=open"
+    elif total:
+        chip_href = "/monitors"
+    else:
+        chip_href = "/dashboard"
+    if down:
+        chip = {"tone": "down", "href": chip_href, "label": f"{down} failing"}
+    elif open_count:
+        chip = {"tone": "warn", "href": chip_href, "label": f"{open_count} open"}
+    elif total:
+        chip = {
+            "tone": "ok" if up == total else "warn",
+            "href": chip_href,
+            "label": f"{up}/{total} healthy",
+        }
+    else:
+        chip = {"tone": "warn", "href": chip_href, "label": "Awaiting first sweep"}
+    if open_count:
+        aside = {
+            "kind": "open",
+            "open_for": snap["open_for"],
+            "open_since": snap["open_since"],
+            "note": "",
+        }
+        incident_sub = {"kind": "open", "since": snap["open_since"], "hm": snap["incident_hm"]}
+    elif snap["history_note"]:
+        aside = {"kind": "note", "open_for": "", "open_since": "", "note": snap["history_note"]}
+        incident_sub = {"kind": "none", "since": "", "hm": ""}
+    else:
+        aside = {"kind": "none", "open_for": "", "open_since": "", "note": ""}
+        incident_sub = {"kind": "none", "since": "", "hm": ""}
+    warns = int(snap["warns"])
+    state = str(snap["hero_state"] or "")
+    latency = "—" if snap["mean_latency_ms"] is None else str(snap["mean_latency_ms"])
+    return {
+        "banner": banner,
+        "chip": chip,
+        "badges": {"fail": down, "open": open_count, "cert": int(counts["expiring"])},
+        "ring": snap["ring"],
+        "icon": snap["hero_icon"],
+        "hero_class": snap["hero_class"] or "",
+        "eye": "Service state" + (f" · {state}" if state else ""),
+        "title": snap["hero_title"],
+        "subline": subline,
+        "actions": actions,
+        "aside": aside,
+        "incident_sub": incident_sub,
+        "tabs": {
+            "all": f"All {total}",
+            "up": f"Up {up}",
+            "down": f"Down {down}",
+            "down_n": down,
+            "expiring": f"Expiring {warns}",
+            "attn": f"Needs attention {down + warns}",
+        },
+        "sweep": snap["last_sweep"],
+        "sweep_at": snap["last_sweep_at"],
+        "checks": str(snap["checks_today"]),
+        "latency": latency,
+        "open": str(open_count),
+        "mix": f"{up} up · {down} down",
+        "total": str(total),
+        "uptime": "—" if str(snap["uptime"]) == "—" else str(snap["uptime"])[:-1],
+        "cert": "—" if snap["next_cert"] is None else str(snap["next_cert"]),
+        "cert_sub": str(snap["next_cert_name"] or "No certificate watched"),
+    }
+
+
+def _shell_from(snap: dict[str, Any]) -> dict[str, object]:
+    """Return the top bar and badges from a snapshot. This does not read the database."""
+    view = snap["view"]
+    banner = view["banner"] or {}
+    counts = snap["counts"]
     return {
         "dot": snap["status_dot"],
         "headline": snap["hero_title"] if isinstance(snap["hero_title"], str) else "",
         "nav": _NAV.get(request.endpoint or "", ""),
-        "nav_incidents": snap["open_incident_count"],
-        "nav_certs": counts["expiring"],
-        "nav_failing": counts["down"],
+        "nav_incidents": view["badges"]["open"],
+        "nav_certs": view["badges"]["cert"],
+        "nav_failing": view["badges"]["fail"],
         "nav_total": counts["total"],
         "nav_healthy": counts["up"],
         "nav_names": [card["name"] for card in snap["cards"]],
         "nav_incident_rows": snap["palette_incidents"],
-        "chip_href": chip_href,
-        "banner_name": banner_name,
-        "banner_plain": banner_plain,
+        "chip_href": view["chip"]["href"],
+        "banner_name": banner.get("name", ""),
+        "banner_plain": banner.get("plain", ""),
         "version": __version__,
     }
 

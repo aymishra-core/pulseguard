@@ -7,23 +7,18 @@
 <div class="actions"><span class="live" data-live data-generated="{{ generated_ms }}"><span class="dot" style="color:var(--ok)"></span><span data-live-label>Live · updated just now</span></span><form method="post" action="{{ url_for('monitor_run_all') }}" data-run-all><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Check all now</button><span class="run-note" data-run-note></span></form><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
 {% set total = counts.up + counts.down + counts.unknown + counts.paused %}
-<section class="card hero {{ hero_class }} hud" data-ring="{{ ring }}" data-kpis aria-label="Status">
-<div class="ring" id="hero-ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="{{ hero_icon }}"/></svg></div></div>
+<section class="card hero{% if view.hero_class %} {{ view.hero_class }}{% endif %} hud" data-ring="{{ view.ring }}" data-kpis aria-label="Status">
+<div class="ring" id="hero-ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="{{ view.icon }}"/></svg></div></div>
 <div class="hero-main">
-<div class="hero-eye" data-snap="hero-eye">Service state{% if hero_state %} · {{ hero_state }}{% endif %}</div>
-<h2 data-snap="hero-title">{{ hero_title }}</h2>
-<p>{% if hero_name %}<a href="{{ url_for('monitor_detail', name=hero_name) }}"><b>{{ hero_name }}</b></a>{% if hero_plain %} {{ hero_plain }}{% endif %}{% elif empty %}No monitors yet. Add one and PulseGuard will start checking it.{% endif %}</p>
+<div class="hero-eye" data-snap="hero-eye">{{ view.eye }}</div>
+<h2 data-snap="hero-title">{{ view.title }}</h2>
+<p data-state="subline">{% if view.subline.kind == 'named' %}<a href="{{ view.subline.href }}"><b>{{ view.subline.name }}</b></a>{% if view.subline.plain %} {{ view.subline.plain }}{% endif %}{% elif view.subline.kind == 'empty' %}No monitors yet. Add one and PulseGuard will start checking it.{% endif %}</p>
 </div>
 <div class="hero-side">
-<div class="t" data-snap="aside">{% if open_incident_count %}<small>Open for</small><b data-snap="open-for" data-opened="{{ open_since }}">{{ open_for }}</b>{% elif history_note %}<b data-snap="history">{{ history_note }}</b>{% endif %}</div>
-<div class="hero-actions">
-{% if counts.down == 1 %}<a class="btn btn-danger" href="{{ url_for('monitor_detail', name=hero_name) }}">Open monitor</a>
-{% elif counts.down > 1 %}<a class="btn btn-danger" href="{{ url_for('monitor_list', status='down') }}">View {{ counts.down }} failing</a>
-{% elif empty %}<a class="btn btn-primary" href="{{ url_for('monitor_new') }}">Add monitor</a>{% endif %}
-{% if incident_id %}<a class="btn btn-ghost" href="{{ url_for('incident_detail', incident_id=incident_id) }}">Open incident</a>{% endif %}
+<div class="t" data-snap="aside">{% if view.aside.kind == 'open' %}<small>Open for</small><b data-snap="open-for" data-opened="{{ view.aside.open_since }}">{{ view.aside.open_for }}</b>{% elif view.aside.kind == 'note' %}<b data-snap="history">{{ view.aside.note }}</b>{% endif %}</div>
+<div class="hero-actions" data-state="actions">{% for action in view.actions %}<a class="{{ action.class }}" href="{{ action.href }}">{{ action.label }}</a>{% endfor %}</div>
 </div>
-</div>
-<p class="hero-sub">Last sweep <time data-snap="sweep" datetime="{{ last_sweep_at }}" data-clock="hms">{{ last_sweep }}</time> · <span data-snap="checks">{{ checks_today }}</span> checks today · mean latency <span data-snap="latency">{% if avg_ms is not none %}{{ avg_ms }}{% else %}—{% endif %}</span> ms · <span data-snap="open">{{ open_incident_count }}</span> open incidents</p>
+<p class="hero-sub">Last sweep <time data-snap="sweep" datetime="{{ view.sweep_at }}" data-clock="hms">{{ view.sweep }}</time> · <span data-snap="checks">{{ view.checks }}</span> checks today · mean latency <span data-snap="latency">{{ view.latency }}</span> ms · <span data-snap="open">{{ view.open }}</span> open incidents</p>
 </section>
 {% if attention %}
 <section class="card attn" data-attention aria-label="Needs attention">
@@ -55,41 +50,41 @@
 <section class="kpis">
 <a class="kpi" data-tone="accent" href="{{ url_for('monitor_list') }}">
 <div class="kpi-top"><span>Monitors</span><svg class="i" aria-hidden="true"><use href="#activity"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-count="{{ total }}" data-kpi="monitors" data-snap="total">{{ total }}</div>{% if trend_up|length > 1 %}<div class="spark" data-spark="{{ trend_up|join(',') }}"></div>{% endif %}</div>
-<div class="kpi-sub" data-snap="mix">{{ counts.up }} up · {{ counts.down }} down</div>
+<div class="kpi-row"><div class="kpi-val" data-count="{{ total }}" data-kpi="monitors" data-snap="total">{{ view.total }}</div>{% if trend_up|length > 1 %}<div class="spark" data-spark="{{ trend_up|join(',') }}"></div>{% endif %}</div>
+<div class="kpi-sub" data-snap="mix">{{ view.mix }}</div>
 </a>
 <a class="kpi" data-tone="ok" href="{{ url_for('monitor_list', sort='uptime') }}">
 <div class="kpi-top"><span>Uptime 24 h</span><svg class="i" aria-hidden="true"><use href="#gauge"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" {% if uptime != '—' %}data-count="{{ uptime[:-1] }}" data-dec="2" data-suf="%" {% endif %}data-kpi="uptime">{{ uptime if uptime == '—' else uptime[:-1] }}</div></div>
+<div class="kpi-row"><div class="kpi-val" {% if view.uptime != '—' %}data-count="{{ view.uptime }}" data-dec="2" data-suf="%" {% endif %}data-kpi="uptime" data-snap="uptime">{{ view.uptime }}</div></div>
 <div class="kpi-sub">Last 24 hours</div>
 </a>
 <a class="kpi" data-tone="accent" href="{{ url_for('monitor_list', sort='latency') }}">
 <div class="kpi-top"><span>Avg latency</span><svg class="i" aria-hidden="true"><use href="#clock"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-kpi="latency"><span data-snap="latency">{{ avg_ms if avg_ms is not none else '—' }}</span>{% if avg_ms is not none %}<small>ms</small>{% endif %}</div></div>
+<div class="kpi-row"><div class="kpi-val" data-kpi="latency"><span data-snap="latency">{{ view.latency }}</span>{% if view.latency != '—' %}<small>ms</small>{% endif %}</div></div>
 <div class="kpi-sub">Whole milliseconds</div>
 </a>
 <a class="kpi" data-tone="danger" href="{{ url_for('incident_list', status='open') }}">
 <div class="kpi-top"><span>Open incidents</span><svg class="i" aria-hidden="true"><use href="#alert"/></svg></div>
 <div class="kpi-row"><div class="kpi-val" data-kpi="incidents"><span data-snap="open">{{ open_incident_count }}</span></div></div>
-<div class="kpi-sub" data-snap="incident-sub">{% if open_incident_count %}since <time datetime="{{ open_since }}" data-clock="hm">{{ incident_hm }}</time>{% else %}None open{% endif %}</div>
+<div class="kpi-sub" data-snap="incident-sub">{% if view.incident_sub.kind == 'open' %}since <time datetime="{{ view.incident_sub.since }}" data-clock="hm">{{ view.incident_sub.hm }}</time>{% else %}None open{% endif %}</div>
 </a>
 <div class="kpi" data-tone="accent">
 <div class="kpi-top"><span>Checks today</span><svg class="i" aria-hidden="true"><use href="#refresh"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" data-kpi="checks"><span data-snap="checks">{{ checks_today }}</span></div></div>
+<div class="kpi-row"><div class="kpi-val" data-kpi="checks"><span data-snap="checks">{{ view.checks }}</span></div></div>
 <div class="kpi-sub">since midnight</div>
 </div>
 <a class="kpi" data-tone="warn" href="{% if next_cert_name %}{{ url_for('monitor_detail', name=next_cert_name) }}{% else %}{{ url_for('certificates') }}{% endif %}">
 <div class="kpi-top"><span>Next cert expiry</span><svg class="i" aria-hidden="true"><use href="#shield"/></svg></div>
-<div class="kpi-row"><div class="kpi-val" {% if next_cert is not none %}data-count="{{ next_cert }}" data-suf="d" {% endif %}data-kpi="cert">{{ next_cert if next_cert is not none else '—' }}</div></div>
-<div class="kpi-sub">{{ next_cert_name if next_cert_name else 'No certificate watched' }}</div>
+<div class="kpi-row"><div class="kpi-val" {% if view.cert != '—' %}data-count="{{ view.cert }}" data-suf="d" {% endif %}data-kpi="cert" data-snap="cert">{{ view.cert }}</div></div>
+<div class="kpi-sub" data-snap="cert-sub">{{ view.cert_sub }}</div>
 </a>
 </section>
 <div class="toolbar">
 <div class="tabs" data-tabs="#mons" role="tablist">
-<button aria-selected="true" data-f="all">All {{ total }}</button>
-<button aria-selected="false" data-f="up">Up {{ counts.up }}</button>
-<button aria-selected="false" data-f="down">Down{% if counts.down %}<span class="n">{{ counts.down }}</span>{% endif %}</button>
-<button aria-selected="false" data-f="warn">Expiring {{ warns }}</button>
+<button aria-selected="true" data-f="all" data-tab="all">{{ view.tabs.all }}</button>
+<button aria-selected="false" data-f="up" data-tab="up">{{ view.tabs.up }}</button>
+<button aria-selected="false" data-f="down" data-tab="down" data-tab-style="mark">Down{% if view.tabs.down_n %}<span class="n">{{ view.tabs.down_n }}</span>{% endif %}</button>
+<button aria-selected="false" data-f="warn" data-tab="expiring">{{ view.tabs.expiring }}</button>
 </div>
 <div class="search"><svg class="i" aria-hidden="true"><use href="#search"/></svg><input type="search" data-search="#mons" placeholder="Filter monitors…" aria-label="Filter monitors"></div>
 </div>
