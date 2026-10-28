@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 - 2026-10-28
+
+Deleting, pausing, or disabling a monitor closes its open incidents. Startup and a catalog reload close any that remain for a monitor that is gone or disabled, one log line each. The incident page can close an open incident. The dashboard hero, the top-bar chip, the banner, and the Incidents badge count only incidents whose monitor is still running.
+
 ## 1.3.0 - 2026-10-28
 
 The console is the finished ui-pack, copied into the Jinja templates. The sidebar, top bar, incident banner, command palette, and page markup keep the pack's class names. Sample monitors, KPIs, incidents, certificates, and the preview strip are gone. The log reads `/api/activity`, Test this check posts `/monitors/probe`, and the chart uses stored latency. A grey slice is no data, not downtime. Times render in the viewer's zone. `ui-pack/` stays untracked.

@@ -13,7 +13,7 @@ from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from pulseguard.checks.models import CheckResult
+from pulseguard.checks.models import CheckResult, utc_now
 from pulseguard.exceptions import ConfigValidationError, StorageError
 from pulseguard.logging_setup import LOGGER_NAME
 from pulseguard.storage.base import Repository
@@ -192,6 +192,7 @@ class SqlRepository(Repository):
             )
         else:
             mark = self._mark
+            was_enabled = monitor_from_row(existing).enabled
             self._change(
                 f"UPDATE monitors SET kind = {mark}, target = {mark}, "
                 f"interval_seconds = {mark}, enabled = {mark} WHERE name = {mark}",
@@ -203,6 +204,8 @@ class SqlRepository(Repository):
                     record.name,
                 ),
             )
+            if was_enabled and not record.enabled:
+                self._close_open_for(record.name, utc_now(), "monitor paused")
         self._commit_if_needed()
 
     def update_monitor(
@@ -230,6 +233,8 @@ class SqlRepository(Repository):
             f"UPDATE monitors SET interval_seconds = {mark}, enabled = {mark} WHERE name = {mark}",
             (updated.interval_seconds, 1 if updated.enabled else 0, updated.name),
         )
+        if current.enabled and not updated.enabled:
+            self._close_open_for(updated.name, utc_now(), "monitor paused")
         self._commit_if_needed()
 
     def monitors(self) -> list[MonitorRecord]:
@@ -253,6 +258,8 @@ class SqlRepository(Repository):
             f"DELETE FROM monitors WHERE name = {self._mark}",
             (chosen,),
         )
+        if count == 1:
+            self._close_open_for(chosen, utc_now(), "monitor removed")
         self._commit_if_needed()
         return count == 1
 
@@ -330,6 +337,34 @@ class SqlRepository(Repository):
             (format_timestamp(ended_at), _as_int(row[0])),
         )
         self._commit_if_needed()
+
+    def close_incident(self, incident_id: int, ended_at: datetime, reason: str) -> bool:
+        """Close one open incident and store ``reason``. A resolved row stays as it is."""
+        chosen = require_row_id(incident_id)
+        row = self._fetchone(
+            f"SELECT state FROM incidents WHERE id = {self._mark}",
+            (chosen,),
+        )
+        if row is None or row[0] != "open":
+            return False
+        self._close_id(chosen, ended_at, reason)
+        self._commit_if_needed()
+        return True
+
+    def reconcile_open_incidents(self, ended_at: datetime) -> list[tuple[int, str]]:
+        """Close open incidents whose monitor is missing or disabled.
+
+        The reason is ``monitor no longer active``. The caller logs each close.
+        """
+        live = {record.name: record.enabled for record in self.monitors()}
+        closed: list[tuple[int, str]] = []
+        for row in self.incidents(state="open"):
+            if live.get(row.monitor) is True:
+                continue
+            self._close_id(row.id, ended_at, "monitor no longer active")
+            closed.append((row.id, row.monitor))
+        self._commit_if_needed()
+        return closed
 
     def incidents(self, *, state: str | None = None) -> list[IncidentRow]:
         """Return incidents, newest first. ``state`` is ``open`` or ``resolved``."""
@@ -601,10 +636,33 @@ class SqlRepository(Repository):
         except Exception as exc:
             LOGGER.warning("storage rollback failed error=%s", type(exc).__name__)
 
+    def _close_open_for(self, monitor: str, ended_at: datetime, reason: str) -> None:
+        """Resolve every open incident for ``monitor``."""
+        rows = self._fetchall(
+            f"SELECT id FROM incidents WHERE monitor = {self._mark} AND state = 'open'",
+            (monitor,),
+        )
+        for row in rows:
+            self._close_id(_as_int(row[0]), ended_at, reason)
+
+    def _close_id(self, incident_id: int, ended_at: datetime, reason: str) -> None:
+        """Mark one open incident resolved. The caller commits."""
+        stamp, text = _close_fields(ended_at, reason)
+        self._change(
+            "UPDATE incidents SET state = 'resolved', ended_at = "
+            f"{self._mark}, reason = {self._mark} WHERE id = {self._mark} AND state = 'open'",
+            (stamp, text, incident_id),
+        )
+
     def _require_open(self) -> None:
         """Refuse work after ``close``."""
         if self._closed:
             raise StorageError("repository is closed")
+
+
+def _close_fields(ended_at: datetime, reason: str) -> tuple[str, str]:
+    """Return the timestamp and reason stored on a closed incident."""
+    return format_timestamp(ended_at), reason[:2000]
 
 
 def _incident_row(row: tuple[object, ...]) -> IncidentRow:

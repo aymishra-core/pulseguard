@@ -107,6 +107,14 @@ class IncidentTracker:
         slot.failures = 0
         slot.successes = 0
 
+    def release(self, monitor: str) -> None:
+        """Forget a monitor whose incident was closed because it no longer runs."""
+        self._slots.pop(monitor, None)
+
+    def open_monitors(self) -> tuple[str, ...]:
+        """Return monitors the tracker still treats as open."""
+        return tuple(name for name, slot in self._slots.items() if slot.state == "open")
+
     def set_thresholds(self, failures_before_open: int, successes_before_resolve: int) -> None:
         """Apply operator settings. Existing open incidents stay open."""
         self._failures_before_open = require_streak(failures_before_open, "failures_before_open")

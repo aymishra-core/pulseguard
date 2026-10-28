@@ -683,8 +683,10 @@ def _crud_steps() -> list[_Step]:
         _Step(rowcount=1),
         _Step(rows=[monitor]),
         _Step(rowcount=1),
+        _Step(rows=[]),
         _Step(rows=[disabled]),
         _Step(rowcount=1),
         _Step(rowcount=0),
         _Step(rowcount=1),
+        _Step(rows=[]),
     ]

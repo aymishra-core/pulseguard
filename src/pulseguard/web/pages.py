@@ -59,6 +59,7 @@ from pulseguard.web.board import (
     activity_lines,
     certificate_band,
     clock,
+    dashboard_hero,
     days_remaining,
     hint_for,
     hourly_counts,
@@ -66,7 +67,6 @@ from pulseguard.web.board import (
     latest_by_name,
     monitor_state,
     plain_message,
-    ring_state,
     segments,
     sparkline,
     stamp,
@@ -368,6 +368,29 @@ def register_pages(app: Flask) -> None:
             alerts=alerts,
             advice=NOT_LEGAL_ADVICE,
         )
+
+    @app.post("/incidents/<int:incident_id>/close")
+    def incident_close(incident_id: int) -> str | RedirectResponse | tuple[str, int]:
+        """Close one open incident. Login and CSRF are required."""
+        denied = _guard()
+        if denied is not None:
+            return denied
+        with _repository() as repo:
+            row = _incident(repo, incident_id)
+            if row is None:
+                return "unknown incident", 404
+            if row.state != "open":
+                _flash("Incident is already closed", "bad")
+                return redirect(url_for("incident_detail", incident_id=incident_id))
+            repo.close_incident(incident_id, utc_now(), "closed manually")
+            monitor = row.monitor
+        engine = current_app.config.get("ENGINE")
+        tracker = getattr(engine, "incidents", None)
+        release = getattr(tracker, "release", None)
+        if callable(release):
+            release(monitor)
+        _flash("Incident closed")
+        return redirect(url_for("incident_detail", incident_id=incident_id))
 
     @app.get("/incidents/<int:incident_id>/evidence")
     def incident_evidence(incident_id: int) -> str | RedirectResponse | Response | tuple[str, int]:
@@ -978,18 +1001,8 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
             }
         )
     day = window(results, now, 24)
-    open_rows = repo.incidents(state="open")
-    since = ""
-    incident_id = 0
-    incident_name = ""
-    incident_plain = ""
-    if open_rows:
-        earliest = min(open_rows, key=lambda row: row.started_at)
-        since = earliest.started_at
-        incident_id = earliest.id
-        incident_name = earliest.monitor
-        raw_cause = earliest.reason or earliest.cause
-        incident_plain = plain_message(raw_cause) if raw_cause else ""
+    active = _active_open(repo)
+    hero = dashboard_hero(records, latest, active, results_exist=bool(results))
     last_cycle = ""
     if results:
         last_cycle = max(item.checked_at for item in results).isoformat()
@@ -999,11 +1012,16 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
     return {
         "cards": cards,
         "counts": counts,
-        "open_incidents": len(open_rows),
-        "incident_id": incident_id,
-        "incident_since": since,
-        "incident_name": incident_name,
-        "incident_plain": incident_plain,
+        "open_incidents": len(active),
+        "incident_id": hero["incident_id"],
+        "incident_since": hero["incident_since"],
+        "incident_name": hero["incident_name"],
+        "incident_plain": hero["incident_plain"],
+        "hero_class": hero["hero_class"],
+        "hero_icon": hero["hero_icon"],
+        "hero_title": hero["hero_title"],
+        "hero_name": hero["hero_name"],
+        "hero_plain": hero["hero_plain"],
         "last_cycle": last_cycle,
         "stream": stream,
         "alerts_ready": alerts_ready,
@@ -1029,7 +1047,7 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "uptime": _pct(uptime(day)),
         "empty": not records,
         "activity": activity_lines(results),
-        "ring": ring_state(list(records), latest, len(open_rows)),
+        "ring": hero["ring"],
         "status_dot": _dot_from(
             [monitor_state(record, latest.get(record.name)) for record in records]
         ),
@@ -1280,23 +1298,26 @@ def _page(template: str, **extra: Any) -> str:
     )
 
 
+def _active_open(repo: Any) -> list[Any]:
+    """Return open incidents whose monitor exists and is still enabled."""
+    enabled = {record.name for record in repo.monitors() if record.enabled}
+    return [row for row in repo.incidents(state="open") if row.monitor in enabled]
+
+
 def _shell(repo: Any) -> dict[str, object]:
     """Return the top-bar state, the plain-language headline, and nav badges."""
     latest = latest_by_name(list(repo.iter_results(None)))
     records = list(repo.monitors())
     states = [monitor_state(record, latest.get(record.name)) for record in records]
     dot = _dot_from(states)
-    down = sum(1 for item in states if item == "down")
-    if down == 1:
-        headline = "1 monitor down"
-    elif down:
-        headline = f"{down} monitors down"
-    elif dot == "up":
-        headline = "All systems operational"
-    elif dot == "paused":
-        headline = "All monitors are paused"
-    else:
-        headline = "Waiting for the first checks"
+    active = _active_open(repo)
+    hero = dashboard_hero(
+        records,
+        latest,
+        active,
+        results_exist=bool(latest),
+    )
+    headline = hero["hero_title"]
     now = utc_now()
     certs = 0
     for record in records:
@@ -1308,21 +1329,20 @@ def _shell(repo: Any) -> dict[str, object]:
         remaining = days_remaining(result.message, now)
         if remaining is not None and remaining <= 30:
             certs += 1
-    open_rows = repo.incidents(state="open")
     banner_id = 0
     banner_name = ""
     banner_plain = ""
-    if open_rows:
-        earliest = min(open_rows, key=lambda row: row.started_at)
+    if active:
+        earliest = min(active, key=lambda row: row.started_at)
         banner_id = earliest.id
         banner_name = earliest.monitor
         raw_cause = earliest.reason or earliest.cause
         banner_plain = plain_message(raw_cause) if raw_cause else ""
     return {
         "dot": dot,
-        "headline": headline,
+        "headline": headline if isinstance(headline, str) else "",
         "nav": _NAV.get(request.endpoint or "", ""),
-        "nav_incidents": len(open_rows),
+        "nav_incidents": len(active),
         "nav_certs": certs,
         "nav_names": [record.name for record in records],
         "banner_id": banner_id,

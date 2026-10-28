@@ -75,7 +75,7 @@
 <div class="dlg">
 <div class="dlg-b">
 <h2>Delete {{ record.name }}?</h2>
-<p>This removes the monitor and its history. Incidents and evidence stay for audit.</p>
+<p>This removes the monitor. An open incident is closed. Evidence stays for audit.</p>
 <div class="row-act">
 <button class="btn btn-ghost" type="button" data-close>Cancel</button>
 <form method="post" action="{{ url_for('monitor_delete', name=record.name) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-danger" type="submit">Delete monitor</button></form>

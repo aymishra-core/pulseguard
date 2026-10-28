@@ -10,6 +10,7 @@
 </div>
 <div class="actions">
 <a class="btn btn-primary" href="{{ url_for('incident_evidence', incident_id=row.id) }}"><svg class="i i-sm" aria-hidden="true"><use href="#file"/></svg>Evidence pack</a>
+{% if row.state == 'open' %}<button class="btn btn-danger" type="button" data-open="close-inc">Close incident</button>{% endif %}
 <a class="btn" href="{{ url_for('monitor_detail', name=row.monitor) }}">Open monitor</a>
 </div>
 </div>
@@ -38,4 +39,18 @@
 <p>Open the monitor and compare it with what you expect. If the change is intended, use <a href="{{ url_for('monitor_edit', name=row.monitor) }}">Learn baseline</a> on the monitor.</p>
 <p>{{ advice }} This record is not legal advice.</p>
 </section>
+{% if row.state == 'open' %}
+<div class="ov" id="close-inc" role="dialog" aria-modal="true" aria-label="Close incident">
+<div class="dlg">
+<div class="dlg-b">
+<h2>Close this incident?</h2>
+<p>PulseGuard will mark it resolved. The reason is stored as closed manually.</p>
+<div class="row-act">
+<button class="btn btn-ghost" type="button" data-close>Cancel</button>
+<form method="post" action="{{ url_for('incident_close', incident_id=row.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-danger" type="submit">Close incident</button></form>
+</div>
+</div>
+</div>
+</div>
+{% endif %}
 {% endblock %}

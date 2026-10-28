@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
 from markupsafe import Markup
 
 from pulseguard.checks.models import CheckResult, Severity
-from pulseguard.storage.records import MonitorRecord
+from pulseguard.storage.records import IncidentRow, MonitorRecord
 
 _DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
@@ -155,13 +156,15 @@ def ring_state(
 ) -> str:
     """Return the hero ring: down, warn, paused, or up.
 
-    Red when an incident is open or any monitor is down. Amber for a gap,
-    a warning that is still up, or anything that is not a clean success.
-    Grey only when every monitor is paused. Green only when every monitor is up.
+    Red when a monitor is down. Amber when an incident is still open between
+    checks, for a gap, or for a warning that is still up. Grey only when every
+    monitor is paused. Green only when every monitor is up.
     """
     states = [monitor_state(record, latest.get(record.name)) for record in records]
-    if open_incidents or "down" in states:
+    if "down" in states:
         return "down"
+    if open_incidents:
+        return "warn"
     for record in records:
         result = latest.get(record.name)
         if result is None:
@@ -177,6 +180,97 @@ def ring_state(
     if all(item == "up" for item in states):
         return "up"
     return "warn"
+
+
+def dashboard_hero(
+    records: Sequence[MonitorRecord],
+    latest: Mapping[str, CheckResult],
+    active: Sequence[IncidentRow],
+    *,
+    results_exist: bool,
+) -> dict[str, object]:
+    """Return the dashboard hero. Only incidents on enabled monitors count."""
+    catalog = list(records)
+    found = dict(latest)
+    down = [record for record in catalog if monitor_state(record, found.get(record.name)) == "down"]
+    if down:
+        return _down_hero(down, found, active)
+    if active:
+        return _waiting_hero(catalog, found, active)
+    if catalog and all(not record.enabled for record in catalog):
+        return _hero("paused", "", "#pause", "All monitors are paused")
+    if not catalog:
+        return _hero("neutral", "", "#plus", "Add your first monitor")
+    if not results_exist:
+        return _hero("neutral", "", "#clock", "Waiting for the first checks")
+    ring = ring_state(catalog, found, 0)
+    if ring == "warn":
+        return _hero("warn", "hero--warn", "#alert", "All systems operational")
+    return _hero("up", "hero--ok", "#check", "All systems operational")
+
+
+def _down_hero(
+    down: list[MonitorRecord],
+    latest: dict[str, CheckResult],
+    active: Sequence[IncidentRow],
+) -> dict[str, object]:
+    """Danger hero for the monitors that are down right now."""
+    first = down[0]
+    result = latest.get(first.name)
+    plain = "" if result is None else plain_message(result.message).rstrip(".")
+    title = "1 monitor is down" if len(down) == 1 else f"{len(down)} monitors are down"
+    match = next((row for row in active if row.monitor == first.name), None)
+    if match is None and active:
+        match = min(active, key=lambda row: row.started_at)
+    view = _hero("down", "hero--danger", "#x", title, name=first.name, plain=plain)
+    if match is not None:
+        view["incident_id"] = match.id
+        view["incident_since"] = match.started_at
+    return view
+
+
+def _waiting_hero(
+    records: list[MonitorRecord],
+    latest: dict[str, CheckResult],
+    active: Sequence[IncidentRow],
+) -> dict[str, object]:
+    """Warn hero when an enabled monitor still has an incident between checks."""
+    ring = ring_state(records, latest, len(active))
+    earliest = min(active, key=lambda row: row.started_at)
+    view = _hero(
+        ring,
+        "hero--warn",
+        "#alert",
+        "Incident open, waiting for the next check",
+        name=earliest.monitor,
+    )
+    view["incident_id"] = earliest.id
+    view["incident_since"] = earliest.started_at
+    return view
+
+
+def _hero(
+    ring: str,
+    hero_class: str,
+    icon: str,
+    title: str,
+    *,
+    name: str = "",
+    plain: str = "",
+) -> dict[str, object]:
+    """Return one hero description. ``incident_id`` stays 0 until a row is attached."""
+    return {
+        "ring": ring,
+        "hero_class": hero_class,
+        "hero_icon": icon,
+        "hero_title": title,
+        "hero_name": name,
+        "hero_plain": plain,
+        "incident_id": 0,
+        "incident_since": "",
+        "incident_name": name,
+        "incident_plain": plain,
+    }
 
 
 def days_remaining(message: str, now: datetime) -> int | None:

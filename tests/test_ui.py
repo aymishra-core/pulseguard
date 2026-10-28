@@ -997,7 +997,7 @@ def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
         ),
         incident=True,
     )
-    assert ring() == ("down", "#x")
+    assert ring() == ("warn", "#alert")
     store(enabled=False)
     assert ring() == ("paused", "#pause")
 

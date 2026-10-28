@@ -161,6 +161,8 @@ class Engine:
         """Start the scheduler, the dispatcher, the pool, and the writer."""
         if self._started:
             raise EngineError("engine is already running")
+        if self._catalog:
+            self._reconcile_incidents()
         self._load_incidents()
         if self._catalog:
             self._reload_catalog()
@@ -319,6 +321,40 @@ class Engine:
                 if name not in live:
                     del self._next_due[name]
         self._sync_agent(agent)
+        self._reconcile_incidents()
+
+    def _reconcile_incidents(self) -> None:
+        """Close stored incidents for monitors that are gone or disabled."""
+        if self._factory is None:
+            return
+        repo = self._factory()
+        try:
+            closer = getattr(repo, "reconcile_open_incidents", None)
+            names = getattr(repo, "open_incident_names", None)
+            closed = closer(utc_now()) if callable(closer) else []
+            still = names() if callable(names) else []
+        finally:
+            repo.close()
+        if not isinstance(closed, list):
+            closed = []
+        still_open: set[str] = set()
+        if isinstance(still, list):
+            still_open = {name for name in still if isinstance(name, str)}
+        for item in closed:
+            if not isinstance(item, tuple) or len(item) != 2:
+                continue
+            incident_id, monitor = item
+            if not isinstance(monitor, str):
+                continue
+            LOGGER.info(
+                "incident closed id=%s monitor=%s reason=monitor no longer active",
+                incident_id,
+                monitor,
+            )
+            self.incidents.release(monitor)
+        for monitor in self.incidents.open_monitors():
+            if monitor not in still_open:
+                self.incidents.release(monitor)
 
     def _sync_agent(self, chosen: tuple[bool, str, int, str]) -> None:
         """Start or stop the collector when the saved agent settings change."""

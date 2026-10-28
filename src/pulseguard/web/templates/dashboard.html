@@ -7,14 +7,12 @@
 <div class="actions"><span class="live"><span class="dot" style="color:var(--ok)"></span>Live · updated just now</span><a class="btn btn-primary" href="{{ url_for('monitor_new') }}"><svg class="i i-sm" aria-hidden="true"><use href="#plus"/></svg>Add monitor</a></div>
 </div>
 {% set total = counts.up + counts.down + counts.unknown + counts.paused %}
-{% set hero = 'hero--danger' if ring == 'down' else ('hero--ok' if ring == 'up' else '') %}
-{% set icon = '#x' if ring == 'down' else ('#pause' if ring == 'paused' else ('#alert' if ring == 'warn' else '#check')) %}
-<section class="card hero {{ hero }} hud" data-ring="{{ ring }}" data-kpis aria-label="Status">
-<div class="ring" id="hero-ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="{{ icon }}"/></svg></div></div>
+<section class="card hero {{ hero_class }} hud" data-ring="{{ ring }}" data-kpis aria-label="Status">
+<div class="ring" id="hero-ring"><div class="ring-core"><svg class="i" aria-hidden="true"><use href="{{ hero_icon }}"/></svg></div></div>
 <div class="hero-main">
-<div class="hero-eye">{% if open_incidents %}Incident active · Monitoring live{% elif ring == 'up' %}Monitoring live{% else %}Monitoring live{% endif %}</div>
-<h2>{% if counts.down == 1 %}1 monitor is down{% elif counts.down %}{{ counts.down }} monitors are down{% elif ring == 'up' %}All systems operational{% elif ring == 'paused' %}All monitors are paused{% elif empty %}Add your first monitor{% else %}Waiting for the first checks{% endif %}</h2>
-<p>{% if incident_name %}<b>{{ incident_name }}</b>{% if incident_plain %} {{ incident_plain }}{% endif %}{% elif empty %}No monitors yet. Add one and PulseGuard will start checking it.{% else %}{{ headline }}{% endif %}</p>
+<div class="hero-eye">{% if open_incidents %}Incident active · Monitoring live{% else %}Monitoring live{% endif %}</div>
+<h2>{{ hero_title }}</h2>
+<p>{% if hero_name %}<b>{{ hero_name }}</b>{% if hero_plain %} {{ hero_plain }}{% endif %}{% elif empty %}No monitors yet. Add one and PulseGuard will start checking it.{% endif %}</p>
 </div>
 <div class="hero-side">
 <div class="t"><small>Open for</small><b>{% if incident_since %}{{ duration(incident_since, '') }}{% else %}—{% endif %}</b></div>
