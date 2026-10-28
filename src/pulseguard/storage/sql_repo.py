@@ -185,12 +185,24 @@ class SqlRepository(Repository):
             raise ConfigValidationError("monitor must be a MonitorRecord")
         existing = self._monitor_row(record.name)
         if existing is None:
-            self._change(
-                "INSERT INTO monitors (name, kind, target, interval_seconds, enabled) "
-                f"VALUES ({self._slots(5)})",
-                _monitor_params(record),
-            )
-        else:
+            try:
+                self._change(
+                    "INSERT INTO monitors (name, kind, target, interval_seconds, enabled) "
+                    f"VALUES ({self._slots(5)})",
+                    _monitor_params(record),
+                )
+            except StorageError:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    LOGGER.warning("monitor insert rollback failed")
+                existing = self._monitor_row(record.name)
+                if existing is None:
+                    raise
+            else:
+                self._commit_if_needed()
+                return
+        if existing is not None:
             mark = self._mark
             was_enabled = monitor_from_row(existing).enabled
             self._change(

@@ -39,6 +39,7 @@ from pulseguard.agent.roster import (
     ensure_agent_monitor,
     load_agents,
     masked_command,
+    migrate_legacy_agents,
     push_command,
     remember_rejection,
     remove_agent,
@@ -632,6 +633,7 @@ def register_pages(app: Flask) -> None:
                     remember_rejection(repo, error, utc_now())
         once = session.pop("agent_token_once", "")
         with _repository() as repo:
+            migrate_legacy_agents(repo)
             enabled = repo.get_setting("agent_enabled") == "1"
             host = repo.get_setting("agent_host") or "127.0.0.1"
             port = repo.get_setting("agent_port") or "8791"

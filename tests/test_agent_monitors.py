@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from datetime import timedelta
@@ -12,6 +13,7 @@ import pytest
 from bs4 import BeautifulSoup
 
 from pulseguard.agent.client import AgentClient
+from pulseguard.agent.protocol import require_token
 from pulseguard.agent.roster import add_agent, ensure_agent_monitor, load_agents
 from pulseguard.checks.agent_check import STALE_MESSAGE, AgentCheck
 from pulseguard.checks.models import CheckResult, Severity, utc_now
@@ -232,6 +234,125 @@ def test_deleting_an_agent_keeps_or_drops_its_history(tmp_path: Path) -> None:
     assert _monitor(database, "edge") is None
     with SqliteRepository(database) as repo:
         assert repo.results_for("edge") == []
+
+
+def test_a_legacy_last_push_can_be_deleted(tmp_path: Path) -> None:
+    """A seen name with no agent row can be removed, with or without a monitor."""
+    client, database = _login(tmp_path)
+    _legacy(database, "agent-test", monitor=False)
+    page = client.get("/agents").get_data(as_text=True)
+    block = _agent_block(page, "agent-test")
+    assert "Open monitor" not in block
+    assert "Keep history" in block
+    assert "Delete history" in block
+    kept = client.post(
+        "/agents/delete",
+        data={"csrf_token": _csrf(page), "name": "agent-test", "history": "keep"},
+        follow_redirects=True,
+    )
+    assert b"agent-test" not in kept.data
+    assert _monitor(database, "agent-test") is None
+    gone = client.get("/agents").get_data(as_text=True)
+    assert "agent-test" not in gone
+
+    _legacy(database, "agent-test", monitor=False)
+    page = client.get("/agents").get_data(as_text=True)
+    assert "Open monitor" not in _agent_block(page, "agent-test")
+    deleted = client.post(
+        "/agents/delete",
+        data={"csrf_token": _csrf(page), "name": "agent-test", "history": "delete"},
+        follow_redirects=True,
+    )
+    assert b"agent-test" not in deleted.data
+    assert _monitor(database, "agent-test") is None
+    assert "agent-test" not in client.get("/agents").get_data(as_text=True)
+
+    _legacy(database, "agent-test", monitor=True, message="kept")
+    page = client.get("/agents").get_data(as_text=True)
+    assert "Open monitor" in _agent_block(page, "agent-test")
+    kept_monitor = client.post(
+        "/agents/delete",
+        data={"csrf_token": _csrf(page), "name": "agent-test", "history": "keep"},
+        follow_redirects=True,
+    )
+    assert not _listed(kept_monitor.get_data(as_text=True), "agent-test")
+    assert not _listed(client.get("/agents").get_data(as_text=True), "agent-test")
+    record = _monitor(database, "agent-test")
+    assert record is not None
+    with SqliteRepository(database) as repo:
+        assert repo.results_for("agent-test")[-1].message == "kept"
+        assert load_agents(repo.get_setting("agents")) == []
+
+    _legacy(database, "agent-test", monitor=True, message="gone")
+    page = client.get("/agents").get_data(as_text=True)
+    assert "Open monitor" in _agent_block(page, "agent-test")
+    removed = client.post(
+        "/agents/delete",
+        data={"csrf_token": _csrf(page), "name": "agent-test", "history": "delete"},
+        follow_redirects=True,
+    )
+    assert b"agent-test" not in removed.data
+    assert "agent-test" not in client.get("/agents").get_data(as_text=True)
+    assert _monitor(database, "agent-test") is None
+    with SqliteRepository(database) as repo:
+        assert repo.results_for("agent-test") == []
+        assert "agent-test" not in (repo.get_setting("agent_seen") or "")
+
+
+def test_startup_adopts_a_legacy_last_push(tmp_path: Path) -> None:
+    """Startup creates the agent record and leaves the monitor for the next push."""
+    database = tmp_path / "legacy.db"
+    with SqliteRepository(database) as repo:
+        repo.set_setting(
+            "agent_seen",
+            json.dumps({"agent-test": "2026-10-27T12:00:00+00:00"}),
+        )
+    engine = Engine(
+        (),
+        repository_factory=lambda: SqliteRepository(database),
+        catalog=True,
+    )
+    engine.start()
+    engine.stop()
+    with SqliteRepository(database) as repo:
+        rows = load_agents(repo.get_setting("agents"))
+        assert repo.monitors() == []
+    assert [row["name"] for row in rows] == ["agent-test"]
+    require_token(str(rows[0]["token"]))
+
+
+def _legacy(database: Path, name: str, *, monitor: bool, message: str = "kept") -> None:
+    """Store a last-push name from before Add agent, and optionally its monitor."""
+    with SqliteRepository(database) as repo:
+        repo.set_setting("agents", "[]")
+        repo.set_setting(
+            "agent_seen",
+            json.dumps({name: "2026-10-27T12:00:00+00:00"}),
+        )
+        if monitor:
+            ensure_agent_monitor(repo, name)
+            repo.add_result(_result(name, message=message))
+        else:
+            repo.delete_history(name)
+            repo.delete_monitor(name)
+
+
+def _listed(page: str, name: str) -> bool:
+    """Return True when this name is an Agents row."""
+    for node in BeautifulSoup(page, "html.parser").select(".agent"):
+        title = node.find("b")
+        if title is not None and title.get_text(strip=True) == name:
+            return True
+    return False
+
+
+def _agent_block(page: str, name: str) -> str:
+    """Return the HTML of the agent row with this name."""
+    for node in BeautifulSoup(page, "html.parser").select(".agent"):
+        title = node.find("b")
+        if title is not None and title.get_text(strip=True) == name:
+            return str(node)
+    raise AssertionError(f"missing agent {name}")
 
 
 def _seed(database: Path, name: str, token: str, message: str) -> None:

@@ -6,6 +6,7 @@ import json
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from threading import Lock
 from typing import Any
 
 from pulseguard.agent.protocol import require_token
@@ -18,6 +19,7 @@ _MAX_AGENTS = 8
 _MAX_REJECTED = 12
 _NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _MASK = "••••••••"
+_MONITOR_LOCK = Lock()
 
 
 def agent_name(value: object) -> str:
@@ -75,9 +77,17 @@ def expected_interval(repo: Any, name: str) -> int:
 
 def ensure_agent_monitor(repo: Any, name: str) -> None:
     """Create or refresh the passive monitor for one accepted push."""
-    from pulseguard.storage.records import MonitorRecord, require_monitor_name
+    from pulseguard.storage.records import require_monitor_name
 
     chosen = require_monitor_name(name)
+    with _MONITOR_LOCK:
+        _save_agent_monitor(repo, chosen)
+
+
+def _save_agent_monitor(repo: Any, chosen: str) -> None:
+    """Insert or refresh one agent monitor. Callers hold ``_MONITOR_LOCK``."""
+    from pulseguard.storage.records import MonitorRecord
+
     seconds = expected_interval(repo, chosen)
     current = next((item for item in repo.monitors() if item.name == chosen), None)
     if (
@@ -89,6 +99,35 @@ def ensure_agent_monitor(repo: Any, name: str) -> None:
         return
     enabled = True if current is None else bool(current.enabled)
     repo.save_monitor(MonitorRecord(chosen, "agent", "", seconds, enabled))
+
+
+def migrate_legacy_agents(repo: Any) -> None:
+    """Give each last-push name an agent record. The monitor waits for the next push."""
+    from pulseguard.checks.heartbeat import HeartbeatCheck
+
+    seen = _seen_map(repo.get_setting("agent_seen"))
+    rows = load_agents(repo.get_setting("agents"))
+    known = {str(row["name"]) for row in rows}
+    added = False
+    for name in sorted(seen):
+        if name in known:
+            continue
+        try:
+            chosen = agent_name(name)
+        except ConfigValidationError:
+            continue
+        secret = require_token(HeartbeatCheck.new_token())
+        trial = [*rows, {"name": chosen, "token": secret, "interval": DEFAULT_INTERVAL}]
+        if len(json.dumps(trial, sort_keys=True)) > 2048:
+            continue
+        rows = trial
+        known.add(chosen)
+        added = True
+    if not added:
+        return
+    repo.set_setting("agents", json.dumps(rows, sort_keys=True))
+    if not repo.get_setting("agent_token"):
+        repo.set_setting("agent_token", str(rows[0]["token"]))
 
 
 def remove_agent(repo: Any, name: str) -> None:
@@ -175,6 +214,8 @@ def describe_agents(
     """Return agent rows and rejected rows for the page."""
     stored = load_agents(repo.get_setting("agents"))
     seen = _seen_map(repo.get_setting("agent_seen"))
+    listing = getattr(repo, "monitors", None)
+    present = {record.name for record in listing()} if callable(listing) else set()
     by_name = {str(row["name"]): row for row in stored}
     names = [str(row["name"]) for row in stored]
     for name in sorted(seen):
@@ -194,6 +235,7 @@ def describe_agents(
                 "message": message,
                 "interval": str(interval),
                 "registered": "1" if record else "",
+                "monitor": "1" if name in present else "",
             }
         )
     rejected = [

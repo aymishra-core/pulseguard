@@ -34,7 +34,7 @@ from pulseguard.core.scheduler import (
     require_schedule_interval,
     select_due,
 )
-from pulseguard.exceptions import AlertError, ConfigValidationError, EngineError
+from pulseguard.exceptions import AlertError, ConfigValidationError, EngineError, StorageError
 from pulseguard.exporters.evidence_pack import write_evidence_pack
 from pulseguard.logging_setup import LOGGER_NAME
 from pulseguard.notifiers.base import Notifier
@@ -163,6 +163,7 @@ class Engine:
         """Start the scheduler, the dispatcher, the pool, and the writer."""
         if self._started:
             raise EngineError("engine is already running")
+        self._migrate_agents()
         if self._catalog:
             self._reconcile_incidents()
         self._load_incidents()
@@ -391,6 +392,20 @@ class Engine:
             self._collector = None
             self._agent_sig = None
 
+    def _migrate_agents(self) -> None:
+        """Adopt last-push names that predate the agent list. No monitor is created."""
+        if self._factory is None:
+            return
+        from pulseguard.agent.roster import migrate_legacy_agents
+
+        repo = self._factory()
+        try:
+            migrate_legacy_agents(repo)
+        except Exception:
+            LOGGER.warning("agent migration failed")
+        finally:
+            repo.close()
+
     def _note_agent(self, result: CheckResult) -> None:
         """Create the passive monitor and remember the push. The token is not stored."""
         if self._factory is None:
@@ -401,7 +416,7 @@ class Engine:
         try:
             try:
                 ensure_agent_monitor(repo, result.monitor)
-            except ConfigValidationError:
+            except (ConfigValidationError, StorageError):
                 LOGGER.warning("agent monitor rejected")
             touch_seen(repo, result.monitor, result.checked_at)
             with self._lock:

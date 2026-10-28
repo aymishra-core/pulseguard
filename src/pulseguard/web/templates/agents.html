@@ -32,10 +32,10 @@
 <div class="hint">Expected every {{ row.interval }} s</div>
 <div class="hint">Last result: {{ row.message }}</div>
 <div class="row-act">
-<a class="btn btn-sm" href="{{ url_for('monitor_detail', name=row.name) }}">Open monitor</a>
+{% if row.monitor %}<a class="btn btn-sm" href="{{ url_for('monitor_detail', name=row.name) }}">Open monitor</a>{% endif %}
 {% if row.registered %}<form method="post" action="{{ url_for('agent_test') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit">Send a test result</button></form>{% endif %}
 </div>
-{% if row.registered %}<details class="agent-del"><summary>Delete</summary><p class="hint">Keep the monitor and its history, or delete both?</p><form method="post" action="{{ url_for('agent_delete') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit" name="history" value="keep">Keep history</button><button class="btn btn-sm btn-ghost" type="submit" name="history" value="delete">Delete history</button></form></details>{% endif %}
+<details class="agent-del"><summary>Delete</summary><p class="hint">Keep the monitor and its history, or delete both?</p><form method="post" action="{{ url_for('agent_delete') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="name" value="{{ row.name }}"><button class="btn btn-sm" type="submit" name="history" value="keep">Keep history</button><button class="btn btn-sm btn-ghost" type="submit" name="history" value="delete">Delete history</button></form></details>
 </div>
 <span class="pill {{ row.tone }}">{{ row.label }}</span>
 </div>
