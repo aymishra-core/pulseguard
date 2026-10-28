@@ -31,7 +31,7 @@
         <p>{{ row.message }}</p>
         <div class="uptime-bar" aria-label="90 day uptime for {{ row.name }}">
           {% for label in bars[row.name] %}
-          <span class="seg {{ label }}" data-tooltip="{% if label == 'gap' or label == 'empty' %}no data{% else %}{{ label }}{% endif %}"></span>
+          <span class="seg {% if label == 'empty' %}miss{% else %}{{ label }}{% endif %}" data-tooltip="{% if label == 'gap' or label == 'empty' %}no data{% else %}{{ label }}{% endif %}"></span>
           {% endfor %}
         </div>
         {% if row.checked_at %}<p>Checked <time class="ago" datetime="{{ row.checked_at }}">{{ clock(row.checked_at) }}</time></p>{% endif %}

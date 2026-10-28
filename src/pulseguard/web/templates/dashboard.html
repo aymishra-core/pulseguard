@@ -2,24 +2,37 @@
 {% block title %}Dashboard · PulseGuard{% endblock %}
 {% block crumb %}Dashboard{% endblock %}
 {% block body %}
+{% set icons = {"http": "i-globe", "keyword": "i-text", "defacement": "i-shield", "tcp": "i-plug", "dns": "i-search", "tls": "i-lock", "heartbeat": "i-heart"} %}
+<header class="page-kicker">
+  <div>
+    <p class="eyebrow">Telemetry</p>
+    <h1>Dashboard</h1>
+  </div>
+  <p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
+</header>
 <section class="hero" id="hero" aria-live="polite">
   <div class="ring {{ ring }}" id="hero-ring">
-    <svg class="icon" aria-hidden="true"><use href="{% if ring == 'up' %}#i-check{% elif ring == 'paused' %}#i-pause{% else %}#i-alert{% endif %}"/></svg>
+    <svg class="icon" aria-hidden="true"><use href="{% if ring == 'up' %}#i-check{% elif ring == 'paused' %}#i-pause{% elif ring == 'down' %}#i-x{% else %}#i-alert{% endif %}"/></svg>
   </div>
   <div>
+    <p class="eyebrow {% if ring == 'down' %}live{% elif ring == 'up' %}ok{% elif ring == 'warn' %}warn{% endif %}" id="hero-kicker">{% if ring == 'down' %}Incident active · monitoring live{% elif ring == 'up' %}All clear · monitoring live{% elif ring == 'paused' %}Paused · monitoring live{% else %}Waiting · monitoring live{% endif %}</p>
     {% if open_incidents %}
-    <h1 id="hero-title"><a href="{% if open_incidents == 1 %}{{ url_for('incident_detail', incident_id=incident_id) }}{% else %}{{ url_for('incident_list') }}{% endif %}">{{ open_incidents }} incident{% if open_incidents != 1 %}s{% endif %} ongoing{% if incident_since %} for <span data-tick="{{ stamp(incident_since) }}" title="{{ clock(incident_since) }}">{{ duration(incident_since, '') }}</span>{% endif %}</a></h1>
-    <p>Open the incident to see what failed and what to check.</p>
+    <h2 id="hero-title">{% if open_incidents == 1 %}One service needs attention{% else %}Services need attention{% endif %}</h2>
+    <p id="hero-detail">{% if incident_since %}Ongoing for <span data-tick="{{ stamp(incident_since) }}" title="{{ clock(incident_since) }}">{{ duration(incident_since, '') }}</span>{% endif %}{% if incident_name %} · {{ incident_name }}{% endif %}{% if incident_plain %} · {{ incident_plain }}{% endif %}</p>
     {% elif dot == "up" %}
-    <h1 id="hero-title">All systems operational</h1>
-    <p>Every enabled monitor answered its last check.</p>
+    <h2 id="hero-title">All systems operational</h2>
+    <p id="hero-detail">Every enabled monitor answered its last check.</p>
     {% elif dot == "down" %}
-    <h1 id="hero-title">{{ headline }}</h1>
-    <p>Look at the down cards first. Run a check now if you just changed something.</p>
+    <h2 id="hero-title">{{ headline }}</h2>
+    <p id="hero-detail">Look at the down cards first. Run a check now if you just changed something.</p>
     {% else %}
-    <h1 id="hero-title">{{ headline }}</h1>
-    <p>Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.</p>
+    <h2 id="hero-title">{{ headline }}</h2>
+    <p id="hero-detail">Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.</p>
     {% endif %}
+  </div>
+  <div class="hero-side">
+    <p>Last check cycle <time class="ago" id="hero-cycle" datetime="{{ last_cycle }}">{{ clock(last_cycle) }}</time></p>
+    <a class="button" id="hero-open" href="{% if open_incidents == 1 %}{{ url_for('incident_detail', incident_id=incident_id) }}{% else %}{{ url_for('incident_list') }}{% endif %}" {% if not open_incidents %}hidden{% endif %}>Open incident</a>
   </div>
 </section>
 {% set step_monitor = 1 if not empty else 0 %}
@@ -29,6 +42,7 @@
 <section class="steps-card" id="onboarding" {% if step_done == 4 %}hidden{% endif %}>
   <div>
     <p class="kind">First steps</p>
+    <h2>Finish your first-run setup</h2>
     <meter min="0" max="4" value="{{ step_done }}" aria-label="Setup progress">{{ step_done }} of 4</meter>
   </div>
   <ol class="step-row">
@@ -40,15 +54,21 @@
   <button type="button" id="hide-onboarding" class="icon-btn" aria-label="Hide checklist">×</button>
 </section>
 <section class="summary" aria-label="Summary">
-  <article class="stat"><h2>Up</h2><p class="metric" data-count="{{ counts.up }}">{{ counts.up }}</p><div class="spark-slot">{{ sparkline(trend_up) }}</div></article>
-  <article class="stat"><h2>Down</h2><p class="metric" data-count="{{ counts.down }}">{{ counts.down }}</p><div class="spark-slot">{{ sparkline(trend_down) }}</div></article>
-  <article class="stat"><h2>Unknown</h2><p class="metric" data-count="{{ counts.unknown }}">{{ counts.unknown }}</p><div class="spark-slot"></div></article>
-  <article class="stat"><h2>Open incidents</h2><p class="metric" data-count="{{ open_incidents }}">{{ open_incidents }}</p><div class="spark-slot"></div></article>
-  <article class="stat"><h2>Certificates within 30 days</h2><p class="metric" data-count="{{ certs }}">{{ certs }}</p><div class="spark-slot"></div></article>
-  <article class="stat"><h2>24 h uptime</h2><p class="metric">{{ uptime }}</p><div class="spark-slot">{{ sparkline(trend_uptime) }}</div></article>
+  <article class="stat"><h2>Up</h2><p class="metric" data-count="{{ counts.up }}">{{ counts.up }}</p><p class="note">answering</p><div class="spark-slot">{{ sparkline(trend_up) }}</div></article>
+  <article class="stat"><h2>Down</h2><p class="metric" data-count="{{ counts.down }}">{{ counts.down }}</p><p class="note">failing</p><div class="spark-slot">{{ sparkline(trend_down) }}</div></article>
+  <article class="stat"><h2>Unknown</h2><p class="metric" data-count="{{ counts.unknown }}">{{ counts.unknown }}</p><p class="note">waiting</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>Incidents</h2><p class="metric" data-count="{{ open_incidents }}">{{ open_incidents }}</p><p class="note">open</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>Expiring</h2><p class="metric" data-count="{{ certs }}">{{ certs }}</p><p class="note">30-day</p><div class="spark-slot"></div></article>
+  <article class="stat"><h2>Uptime</h2><p class="metric">{{ uptime }}</p><p class="note">24 h</p><div class="spark-slot">{{ sparkline(trend_uptime) }}</div></article>
 </section>
-<p id="updated" data-updated aria-live="polite">updated 0 s ago</p>
+<div class="section-head">
+  <h2>Monitors</h2>
+  <a href="{{ url_for('monitor_list') }}">View all</a>
+</div>
 <div class="filters">
+  <label for="filter-query">Search
+  <input id="filter-query" type="search" placeholder="Search monitors" />
+  </label>
   <label for="filter-kind">Kind
   <select id="filter-kind">
     <option value="">All kinds</option>
@@ -68,9 +88,6 @@
     <option value="state">State</option>
   </select>
   </label>
-  <label for="filter-query">Search
-  <input id="filter-query" type="search" placeholder="Name" />
-  </label>
 </div>
 {% if empty %}
 <section class="empty">
@@ -79,28 +96,40 @@
   <p><a class="button" href="{{ url_for('monitor_new') }}">Add your first monitor</a></p>
 </section>
 {% endif %}
-<div class="layout">
-  <div class="cards" data-board>
-    {% for card in cards %}
-    <article class="card" data-monitor data-kind="{{ card.kind }}" data-state="{{ card.state }}" data-name="{{ card.name }}" data-interval="{{ card.interval }}" data-checked="{{ card.checked_at }}">
-      <p class="kind">{{ card.kind }}</p>
-      <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
-      <p><span class="pill {{ card.state }}">{{ card.state }}</span></p>
-      <p>{{ card.plain }}</p>
-      <p class="muted"><time class="ago" datetime="{{ card.checked_at }}">{{ card.checked }}</time></p>
-      <p class="muted next-check">Next check soon</p>
-      <p class="uptime-bar" aria-label="24 hour uptime bar">{% for part in card.segments %}<i class="seg {{ part }}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
-      <p>24 h uptime {{ card.uptime }}</p>
+<div class="cards" data-board>
+  {% for card in cards %}
+  <article class="card" data-monitor data-kind="{{ card.kind }}" data-state="{{ card.state }}" data-name="{{ card.name }}" data-interval="{{ card.interval }}" data-checked="{{ card.checked_at }}">
+    <div class="card-top">
+      <span class="kind-icon" aria-hidden="true"><svg class="icon"><use href="#{{ icons.get(card.kind, 'i-heart') }}"/></svg></span>
+      <div class="card-id">
+        <h2><a href="{{ url_for('monitor_detail', name=card.name) }}">{{ card.name }}</a></h2>
+        <p class="mono">{{ card.target }}</p>
+      </div>
+      <span class="pill {{ card.state }}">{{ card.state }}</span>
+    </div>
+    <p>{{ card.plain }}</p>
+    <div class="card-meta">
+      <p class="muted">Last checked <time class="ago" datetime="{{ card.checked_at }}">{{ card.checked }}</time></p>
+      <p class="next-check" aria-label="Next check">{{ card.interval }}</p>
+    </div>
+    <p class="uptime-label">24 h uptime {{ card.uptime }}</p>
+    <p class="uptime-bar" aria-label="24 hour uptime bar">{% for part in card.segments %}<i class="seg {% if part == 'empty' %}miss{% else %}{{ part }}{% endif %}" data-tooltip="{% if part == 'gap' or part == 'empty' %}no data{% else %}{{ part }}{% endif %}"></i>{% endfor %}</p>
+    <div class="card-foot">
+      <span class="kind">{{ card.kind }} · {{ card.interval }}s</span>
       {{ card.spark }}
       <form method="post" action="{{ url_for('monitor_check', name=card.name) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <button type="submit" class="btn-ghost">Run now</button>
       </form>
-    </article>
-    {% endfor %}
-  </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+<div class="layout">
   <aside class="panel" aria-label="Activity">
-    <h2>Activity</h2>
+    <p class="eyebrow">Live</p>
+    <h2>Live activity</h2>
+    <p class="note">Recent changes across your checks</p>
     <ul class="activity" id="activity">
       {% for event in activity %}
       <li>
@@ -110,6 +139,24 @@
       </li>
       {% else %}
       <li class="muted">No changes yet.</li>
+      {% endfor %}
+    </ul>
+  </aside>
+  <aside class="panel" aria-label="Check stream">
+    <p class="eyebrow">Latest</p>
+    <h2>Check stream</h2>
+    <p class="note">Newest stored results</p>
+    <ul class="stream" id="stream">
+      {% for row in stream %}
+      <li>
+        <time class="ago" datetime="{{ row.at }}">{{ clock(row.at) }}</time>
+        <span class="mark {{ row.mark|lower }}">{{ row.mark }}</span>
+        <span>{{ row.name }}</span>
+        <span class="stream-msg">{{ row.plain }}</span>
+        <span class="num">{{ row.latency }} ms</span>
+      </li>
+      {% else %}
+      <li class="muted">No results yet.</li>
       {% endfor %}
     </ul>
   </aside>

@@ -18,7 +18,7 @@
     <p class="kind">{{ row.kind }}</p>
     <h2><a href="{{ url_for('monitor_detail', name=row.name) }}">{{ row.name }}</a></h2>
     <p><span class="pill {{ row.state }}">{{ row.state }}</span></p>
-    <p>{{ row.target }}</p>
+    <p class="mono">{{ row.target }}</p>
     <p class="muted">Every {{ row.interval }}s</p>
   </article>
   {% endfor %}

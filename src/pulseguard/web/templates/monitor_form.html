@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if editing %}Edit{% else %}Add{% endif %} monitor · PulseGuard{% endblock %}
+{% block crumb %}{% if editing %}Edit monitor{% else %}Add monitor{% endif %}{% endblock %}
 {% block body %}
 <h1>{% if editing %}Edit {{ values.name }}{% else %}Add a monitor{% endif %}</h1>
 <p class="steps" id="steps"><span class="on" data-step-tab="1">1. Kind</span><span data-step-tab="2">2. Details</span><span data-step-tab="3">3. Review</span></p>

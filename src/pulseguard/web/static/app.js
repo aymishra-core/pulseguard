@@ -421,7 +421,8 @@
       if (!label || !stamp) return;
       var age = (Date.now() - new Date(stamp).getTime()) / 1000;
       var left = Math.max(0, Math.round(interval - age));
-      label.textContent = left ? "Next check in " + left + " s" : "Check due";
+      label.textContent = left ? String(left) : "0";
+      label.setAttribute("aria-label", left ? "Next check in " + left + " s" : "Check due");
     });
   }
   paintTimes();
@@ -652,8 +653,15 @@
     var dot = "unknown";
     var line = "Waiting for the first checks";
     var detail = "Add a monitor or wait for the first check. Nothing here contacts a target until a check runs.";
-    if (down === 1) { dot = "down"; line = "1 monitor down"; }
-    else if (down > 1) { dot = "down"; line = down + " monitors down"; }
+    if (down === 1) {
+      dot = "down";
+      line = "1 monitor down";
+      detail = "Look at the down cards first. Run a check now if you just changed something.";
+    } else if (down > 1) {
+      dot = "down";
+      line = down + " monitors down";
+      detail = "Look at the down cards first. Run a check now if you just changed something.";
+    }
     else if (up > 0) {
       dot = "up";
       line = "All systems operational";
@@ -672,29 +680,41 @@
       var ringState = body.ring || (open || down ? "down" : dot);
       ring.className = "ring " + ringState;
       var glyph = ring.querySelector("use");
-      var iconName = ringState === "up" ? "#i-check" : (ringState === "paused" ? "#i-pause" : "#i-alert");
+      var iconName = ringState === "up" ? "#i-check" : (ringState === "paused" ? "#i-pause" : (ringState === "down" ? "#i-x" : "#i-alert"));
       if (glyph) glyph.setAttribute("href", iconName);
+      var kicker = document.querySelector("#hero-kicker");
+      if (kicker) {
+        kicker.className = "eyebrow" + (ringState === "down" ? " live" : (ringState === "up" ? " ok" : (ringState === "warn" ? " warn" : "")));
+        kicker.textContent = ringState === "down"
+          ? "Incident active · monitoring live"
+          : (ringState === "up" ? "All clear · monitoring live" : (ringState === "paused" ? "Paused · monitoring live" : "Waiting · monitoring live"));
+      }
     }
     if (title) {
-      title.textContent = "";
-      if (open) {
-        var incidentLink = document.createElement("a");
-        incidentLink.href = open === 1 && body.incident_id ? "/incidents/" + body.incident_id : "/incidents";
-        incidentLink.appendChild(document.createTextNode(open + (open === 1 ? " incident ongoing for " : " incidents ongoing for ")));
-        var tick = document.createElement("span");
-        if (body.incident_since) tick.setAttribute("data-tick", body.incident_since);
-        incidentLink.appendChild(tick);
-        title.appendChild(incidentLink);
-        paintTicks();
-      } else {
-        title.textContent = line;
-      }
-      if (title.nextElementSibling) {
-        title.nextElementSibling.textContent = open
-          ? "Open the incident to see what failed and what to check."
-          : detail;
+      title.textContent = open ? (open === 1 ? "One service needs attention" : "Services need attention") : line;
+      var detailNode = document.querySelector("#hero-detail");
+      if (detailNode) {
+        detailNode.textContent = "";
+        if (open) {
+          detailNode.appendChild(document.createTextNode("Ongoing for "));
+          var tick = document.createElement("span");
+          if (body.incident_since) tick.setAttribute("data-tick", body.incident_since);
+          detailNode.appendChild(tick);
+          if (body.incident_name) detailNode.appendChild(document.createTextNode(" · " + body.incident_name));
+          if (body.incident_plain) detailNode.appendChild(document.createTextNode(" · " + body.incident_plain));
+          paintTicks();
+        } else {
+          detailNode.textContent = detail;
+        }
       }
     }
+    var opener = document.querySelector("#hero-open");
+    if (opener) {
+      opener.hidden = !open;
+      opener.setAttribute("href", open === 1 && body.incident_id ? "/incidents/" + body.incident_id : "/incidents");
+    }
+    var cycle = document.querySelector("#hero-cycle");
+    if (cycle && body.last_cycle) cycle.setAttribute("datetime", body.last_cycle);
     if (dot === "down") document.title = "(" + down + " down) " + document.title.replace(/^\(\d+ down\) /, "");
     else document.title = document.title.replace(/^\(\d+ down\) /, "");
     var icon = document.querySelector("link[rel='icon']");
@@ -711,10 +731,14 @@
         main.insertBefore(banner, main.querySelector("main"));
       }
       banner.textContent = "";
-      banner.appendChild(document.createTextNode(open + (open === 1 ? " open incident. " : " open incidents. ")));
+      var note = document.createElement("span");
+      note.textContent = open === 1
+        ? "1 incident is affecting monitored services"
+        : open + " incidents are affecting monitored services";
       var see = document.createElement("a");
       see.href = "/incidents";
-      see.textContent = "See what to check";
+      see.textContent = "Review incident";
+      banner.appendChild(note);
       banner.appendChild(see);
     } else if (banner) {
       banner.remove();
@@ -746,11 +770,12 @@
       if (name === "Up") value.textContent = counts.up;
       if (name === "Down") value.textContent = counts.down;
       if (name === "Unknown") value.textContent = counts.unknown;
-      if (name === "Open incidents") value.textContent = body.open_incidents;
-      if (name === "Certificates within 30 days") value.textContent = body.certs;
-      if (name === "24 h uptime") value.textContent = body.uptime;
+      if (name === "Incidents") value.textContent = body.open_incidents;
+      if (name === "Expiring") value.textContent = body.certs;
+      if (name === "Uptime") value.textContent = body.uptime;
     });
     board.textContent = "";
+    var kindIcons = { http: "i-globe", keyword: "i-text", defacement: "i-shield", tcp: "i-plug", dns: "i-search", tls: "i-lock", heartbeat: "i-heart" };
     (body.monitors || []).forEach(function (monitor) {
       var card = document.createElement("article");
       card.className = "card";
@@ -760,24 +785,44 @@
       card.setAttribute("data-name", monitor.name);
       card.setAttribute("data-interval", String(monitor.interval || 30));
       card.setAttribute("data-checked", monitor.checked_at || "");
-      var kindText = document.createElement("p");
-      kindText.className = "kind";
-      kindText.textContent = monitor.kind;
+      var top = document.createElement("div");
+      top.className = "card-top";
+      var iconWrap = document.createElement("span");
+      iconWrap.className = "kind-icon";
+      iconWrap.setAttribute("aria-hidden", "true");
+      var icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("class", "icon");
+      var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#" + (kindIcons[monitor.kind] || "i-heart"));
+      icon.appendChild(use);
+      iconWrap.appendChild(icon);
+      var ident = document.createElement("div");
+      ident.className = "card-id";
       var heading = document.createElement("h2");
       var link = document.createElement("a");
       link.href = "/monitors/" + encodeURIComponent(monitor.name) + "/view";
       link.textContent = monitor.name;
       heading.appendChild(link);
-      var pillRow = document.createElement("p");
+      var target = document.createElement("p");
+      target.className = "mono";
+      target.textContent = monitor.target || "";
+      ident.appendChild(heading);
+      ident.appendChild(target);
       var pill = document.createElement("span");
       pill.className = "pill " + monitor.state;
       pill.textContent = monitor.state;
-      pillRow.appendChild(pill);
+      top.appendChild(iconWrap);
+      top.appendChild(ident);
+      top.appendChild(pill);
       var message = document.createElement("p");
       message.textContent = monitor.plain || monitor.message || "no results yet";
+      var meta = document.createElement("div");
+      meta.className = "card-meta";
       var checked = document.createElement("p");
       checked.className = "muted";
+      checked.appendChild(document.createTextNode("Last checked "));
       var time = document.createElement("time");
+      time.className = "ago";
       if (monitor.checked_at) {
         time.setAttribute("datetime", monitor.checked_at);
         time.textContent = monitor.checked || "not checked";
@@ -785,16 +830,52 @@
         time.textContent = "not checked";
       }
       checked.appendChild(time);
+      var next = document.createElement("p");
+      next.className = "next-check";
+      next.textContent = String(monitor.interval || "");
+      meta.appendChild(checked);
+      meta.appendChild(next);
       var uptime = document.createElement("p");
+      uptime.className = "uptime-label";
       uptime.textContent = "24 h uptime " + monitor.uptime;
-      card.appendChild(kindText);
-      card.appendChild(heading);
-      card.appendChild(pillRow);
-      card.appendChild(message);
-      card.appendChild(checked);
-      card.appendChild(uptime);
+      var bar = document.createElement("p");
+      bar.className = "uptime-bar";
+      bar.setAttribute("aria-label", "24 hour uptime bar");
+      (monitor.segments || []).forEach(function (part) {
+        var seg = document.createElement("i");
+        seg.className = "seg " + (part === "empty" ? "miss" : part);
+        seg.setAttribute("data-tooltip", part === "gap" || part === "empty" ? "no data" : part);
+        bar.appendChild(seg);
+      });
+      var foot = document.createElement("div");
+      foot.className = "card-foot";
+      var kindText = document.createElement("span");
+      kindText.className = "kind";
+      kindText.textContent = monitor.kind + " · " + monitor.interval + "s";
+      foot.appendChild(kindText);
       var drawn = spark(monitor.points || []);
-      if (drawn) card.appendChild(drawn);
+      if (drawn) foot.appendChild(drawn);
+      var form = document.createElement("form");
+      form.method = "post";
+      form.action = "/monitors/" + encodeURIComponent(monitor.name) + "/check";
+      var csrf = document.createElement("input");
+      csrf.type = "hidden";
+      csrf.name = "csrf_token";
+      var tokenInput = document.querySelector("input[name=csrf_token]");
+      csrf.value = tokenInput ? tokenInput.value : "";
+      var run = document.createElement("button");
+      run.type = "submit";
+      run.className = "btn-ghost";
+      run.textContent = "Run now";
+      form.appendChild(csrf);
+      form.appendChild(run);
+      foot.appendChild(form);
+      card.appendChild(top);
+      card.appendChild(message);
+      card.appendChild(meta);
+      card.appendChild(uptime);
+      card.appendChild(bar);
+      card.appendChild(foot);
       board.appendChild(card);
     });
     var feed = document.querySelector("#activity");
@@ -820,6 +901,38 @@
         item.appendChild(text);
         item.appendChild(when);
         feed.appendChild(item);
+      });
+    }
+    var stream = document.querySelector("#stream");
+    if (stream && body.stream) {
+      stream.textContent = "";
+      if (!body.stream.length) {
+        var none = document.createElement("li");
+        none.textContent = "No results yet.";
+        stream.appendChild(none);
+      }
+      body.stream.forEach(function (row) {
+        var item = document.createElement("li");
+        var when = document.createElement("time");
+        when.className = "ago";
+        when.setAttribute("datetime", row.at || "");
+        var mark = document.createElement("span");
+        mark.className = "mark " + String(row.mark || "").toLowerCase();
+        mark.textContent = row.mark || "";
+        var name = document.createElement("span");
+        name.textContent = row.name || "";
+        var msg = document.createElement("span");
+        msg.className = "stream-msg";
+        msg.textContent = row.plain || "";
+        var latency = document.createElement("span");
+        latency.className = "num";
+        latency.textContent = row.latency + " ms";
+        item.appendChild(when);
+        item.appendChild(mark);
+        item.appendChild(name);
+        item.appendChild(msg);
+        item.appendChild(latency);
+        stream.appendChild(item);
       });
     }
     applyFilter();

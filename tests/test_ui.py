@@ -990,16 +990,27 @@ def test_hero_ring_matches_the_dashboard_state(tmp_path: Path) -> None:
             moment + timedelta(minutes=3),
         )
     )
-    assert ring() == ("down", "#i-alert")
+    assert ring() == ("down", "#i-x")
     store(
         CheckResult(
             "web", "http", True, 11, "HTTP 200", Severity.OK, moment + timedelta(minutes=4)
         ),
         incident=True,
     )
-    assert ring() == ("down", "#i-alert")
+    assert ring() == ("down", "#i-x")
     store(enabled=False)
     assert ring() == ("paused", "#i-pause")
+
+
+def test_sidebar_shows_the_installed_version(tmp_path: Path) -> None:
+    """The product line uses the package version, not a prototype number."""
+    from pulseguard import __version__
+
+    client, _database = _login(tmp_path)
+    page = client.get("/dashboard")
+    assert __version__.encode() in page.data
+    assert b"1.8.4" not in page.data
+    assert b"SELF-HOSTED" in page.data
 
 
 def _login(tmp_path: Path):

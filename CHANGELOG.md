@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 - 2026-10-28
+
+The console uses the telemetry look from the v0 screenshots: grid field, teal accent, HUD corners, and a pulsing status ring. The sidebar is split into Monitor and System, the top bar has the breadcrumb, status pill, Jump to…, theme icon, and account menu, and the product line shows the installed version.
+
+- One incident strip plus the hero. The strip says services are affected. The hero says what needs attention, how long it has run, and when the last check cycle was.
+- Summary tiles use short labels. The sparkline has its own column. Monitor cards show the kind icon, target, state, next-check ring, a 90-slice uptime bar, and Run now.
+- Live activity and a check stream sit under the cards. The stream is stored results only.
+- CSS is 29,944 bytes and JavaScript is 41,115 bytes, inside the existing 60 KB and 90 KB budgets.
+
 ## 1.2.2 - 2026-10-28
 
 Links follow one rule. A name inherits the text colour at weight 600 and shows the accent underline only on hover or keyboard focus. A link in a sentence uses the accent colour with an underline offset. The hero ring is red when an incident is open or a monitor is down, amber for a gap or a warning, grey when every monitor is paused, and green only when every monitor is up.

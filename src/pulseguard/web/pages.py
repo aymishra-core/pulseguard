@@ -29,6 +29,7 @@ from flask import (
 )
 from werkzeug.wrappers import Response as RedirectResponse
 
+from pulseguard import __version__
 from pulseguard.agent.protocol import require_agent_host, require_agent_port, require_token
 from pulseguard.checks.base import build_check
 from pulseguard.checks.defacement import DefacementCheck
@@ -895,10 +896,12 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
                 certs += 1
         checked_at = None if result is None else result.checked_at
         raw = "" if result is None else result.message
+        target = record.target if record.kind != "heartbeat" else "token hidden"
         cards.append(
             {
                 "name": record.name,
                 "kind": record.kind,
+                "target": target,
                 "state": state,
                 "message": raw,
                 "plain": plain_message(raw)
@@ -917,10 +920,19 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
     open_rows = repo.incidents(state="open")
     since = ""
     incident_id = 0
+    incident_name = ""
+    incident_plain = ""
     if open_rows:
         earliest = min(open_rows, key=lambda row: row.started_at)
         since = earliest.started_at
         incident_id = earliest.id
+        incident_name = earliest.monitor
+        raw_cause = earliest.reason or earliest.cause
+        incident_plain = plain_message(raw_cause) if raw_cause else ""
+    last_cycle = ""
+    if results:
+        last_cycle = max(item.checked_at for item in results).isoformat()
+    stream = [_stream_row(item) for item in reversed(results[-12:])]
     alerts_ready = bool((repo.get_setting("smtp_host") or "").strip())
     has_heartbeat = any(record.kind == "heartbeat" for record in records)
     return {
@@ -929,6 +941,10 @@ def _dashboard_body(repo: Any) -> dict[str, Any]:
         "open_incidents": len(open_rows),
         "incident_id": incident_id,
         "incident_since": since,
+        "incident_name": incident_name,
+        "incident_plain": incident_plain,
+        "last_cycle": last_cycle,
+        "stream": stream,
         "alerts_ready": alerts_ready,
         "has_heartbeat": has_heartbeat,
         "trend_up": hourly_counts(results, now, ok=True),
@@ -954,6 +970,10 @@ def _json_ready(body: dict[str, Any]) -> dict[str, Any]:
         "open_incidents": body["open_incidents"],
         "incident_id": body.get("incident_id", 0),
         "incident_since": body.get("incident_since", ""),
+        "incident_name": body.get("incident_name", ""),
+        "incident_plain": body.get("incident_plain", ""),
+        "last_cycle": body.get("last_cycle", ""),
+        "stream": body.get("stream", []),
         "certs": body["certs"],
         "uptime": body["uptime"],
         "ring": body.get("ring", "warn"),
@@ -1210,6 +1230,7 @@ def _shell(repo: Any) -> dict[str, object]:
         "nav_incidents": len(repo.incidents(state="open")),
         "nav_certs": certs,
         "nav_names": [record.name for record in records],
+        "version": __version__,
     }
 
 
@@ -1393,6 +1414,23 @@ def _state_span(results: list[Any], now: datetime) -> str:
     clock = f"{hours}h {minutes}m" if hours else f"{minutes}m"
     word = "up" if latest.ok else "down"
     return f"{word} for {clock}"
+
+
+def _stream_row(item: CheckResult) -> dict[str, object]:
+    """Return one terminal-log line from a stored result."""
+    if item.message == "monitoring gap":
+        mark = "GAP"
+    elif item.ok:
+        mark = "PASS"
+    else:
+        mark = "FAIL"
+    return {
+        "at": item.checked_at.isoformat(),
+        "name": item.monitor,
+        "mark": mark,
+        "latency": round(item.latency_ms),
+        "plain": plain_message(item.message) if item.message else "",
+    }
 
 
 def _pct(value: float | None) -> str:

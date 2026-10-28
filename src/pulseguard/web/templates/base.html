@@ -27,41 +27,46 @@
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 9.5 17 19 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
       <symbol id="i-panel" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 5v14" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     </svg>
     <div class="shell" id="shell">
       <nav class="nav" aria-label="Sections">
-        <a class="brand" href="{{ url_for('dashboard') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="brand-text">PulseGuard</span></a>
+        <a class="brand" href="{{ url_for('dashboard') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="brand-text"><span class="brand-name">PulseGuard</span><span class="brand-meta">SELF-HOSTED · {{ version }}</span></span></a>
+        <p class="nav-label">Monitor</p>
         <a href="{{ url_for('dashboard') }}"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg><span class="label">Dashboard</span></a>
         <a href="{{ url_for('monitor_list') }}"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span class="label">Monitors</span></a>
         <a href="{{ url_for('incident_list') }}"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span class="label">Incidents</span>{% if nav_incidents %}<span class="badge">{{ nav_incidents }}</span>{% endif %}</a>
         <a href="{{ url_for('certificates') }}"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><span class="label">Certificates</span>{% if nav_certs %}<span class="badge">{{ nav_certs }}</span>{% endif %}</a>
         <a href="{{ url_for('alerts') }}"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span class="label">Alerts</span></a>
         <a href="{{ url_for('sla') }}"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><span class="label">SLA</span></a>
+        <p class="nav-label">System</p>
         <a href="{{ url_for('agents') }}"><svg class="icon" aria-hidden="true"><use href="#i-plug"/></svg><span class="label">Agents</span></a>
         <a href="{{ url_for('data_page') }}"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg><span class="label">Data</span></a>
         <a href="{{ url_for('settings') }}"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg><span class="label">Settings</span></a>
         <a href="{{ url_for('help_page') }}"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span class="label">Help</span></a>
-        <a href="{{ url_for('public_status') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="label">Public status</span></a>
         <div class="nav-tools">
-          <button type="button" class="icon-btn" id="nav-collapse" aria-pressed="false" aria-label="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg></button>
+          <a href="{{ url_for('public_status') }}"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="label">View status page</span></a>
+          <button type="button" class="icon-btn" id="nav-collapse" aria-pressed="false" aria-label="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="#i-panel"/></svg><span class="label">Collapse sidebar</span></button>
         </div>
       </nav>
       <div class="main">
         <header class="top">
-          <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> <span id="headline">{{ headline }}</span></p>
-          <p class="crumb">{% block crumb %}{% endblock %}</p>
+          <p class="crumb"><a href="{{ url_for('dashboard') }}">PulseGuard</a> <span aria-hidden="true">/</span> {% block crumb %}{% endblock %}</p>
           <div class="spacer"></div>
+          <p class="headline"><span class="pill {{ dot }}">{{ dot }}</span> <span id="headline">{{ headline }}</span></p>
+          <button type="button" class="btn-secondary" id="palette-open">Jump to… <kbd>Ctrl</kbd><kbd>K</kbd></button>
           <button type="button" class="icon-btn" id="theme-toggle" aria-pressed="false" aria-label="Theme"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg></button>
-          <button type="button" class="btn-secondary" id="palette-open">Search <kbd>Ctrl</kbd><kbd>K</kbd></button>
-          <p class="who">Signed in as <strong>{{ user }}</strong></p>
-          <form method="post" action="{{ url_for('console_logout') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <button type="submit" class="btn-secondary">Log out</button>
-          </form>
+          <details class="user-menu">
+            <summary>{{ user }}</summary>
+            <form method="post" action="{{ url_for('console_logout') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="btn-secondary">Log out</button>
+            </form>
+          </details>
         </header>
         {% if nav_incidents %}
-        <p class="banner" role="status">{{ nav_incidents }} open incident{% if nav_incidents != 1 %}s{% endif %}. <a href="{{ url_for('incident_list') }}">See what to check</a></p>
+        <p class="banner" role="status"><span>{% if nav_incidents == 1 %}1 incident is affecting monitored services{% else %}{{ nav_incidents }} incidents are affecting monitored services{% endif %}</span> <a href="{{ url_for('incident_list') }}">Review incident</a></p>
         {% endif %}
         {% if flash %}
         <p class="toast {{ flash_level }}" role="status">{{ flash }}</p>
