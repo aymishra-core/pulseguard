@@ -1,5 +1,9 @@
 # PulseGuard
 
+PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
+
+Current release: **1.3.10**. A silent agent records one missed report per expected interval. Three of those open one incident and send one email. The next successful push resolves it. Older releases are in [CHANGELOG.md](CHANGELOG.md).
+
 ```sh
 python3 -m venv .venv && . .venv/bin/activate && pip install -e .
 pulseguard serve
@@ -24,49 +28,33 @@ In another terminal, run `pulseguard serve` and create the admin account. Click 
 
 On the lab page, use **Make site DOWN**, **Bring site UP**, and **Deface page**. For a defacement monitor, leave the baseline on **Learn from the first successful check** before you deface the page.
 
-PulseGuard is a self-hosted monitor for websites, APIs, TCP ports, TLS certificate expiry, and scheduled-job heartbeats. This repository is a student project built to production-grade standards. It is not a replacement for Uptime Kuma or any other monitoring product.
+## Screenshots
 
-Version 1.3.10 records a missed agent report once per expected interval, so three silent intervals open one incident and send one email, and the next push resolves it. Version 1.3.9 keeps the sidebar, Settings, and Help on screen while the monitor list scrolls on its own, leaves room around Save, and fits the countdown and the response-time tooltip inside the page. It also lets every Agents row be deleted, including a last-push name from before Add agent, and shows Open monitor only once that monitor exists. Version 1.3.8 makes an agent push a real monitor: the same cards, history, uptime, SLA, live log, and incident rules as every other check, including a failure when the agent goes silent. Version 1.3.7 makes the Agents page self-explanatory: add an agent, copy the real `pulseguard push` command, and see whether it has checked in. Version 1.3.6 paints every status element from one payload, so a live refresh and a reload show the same ring, banner, buttons, counts, and pills. Version 1.3.5 fills the live check log from completed checks and keeps its streaming badge honest. Version 1.3.4 asks for a host or a URL to match the check, offers a one-click fix when a URL is pasted into a host field, and picks dependencies as removable chips. Version 1.3.3 draws the dashboard from one snapshot, so the hero and the tiles show the same checks, latency, and open incidents, and the mark links back to the dashboard. Version 1.3.2 names the service state and links each failing monitor, incident, and certificate from the dashboard. Version 1.3.1 closes an incident when its monitor is removed, paused, or disabled, and the dashboard hero follows only monitors that are still running. Version 1.3.0 is the finished console from the design pack: the same sidebar, top bar, incident banner, and page structure, filled with stored monitors and incidents. The type is the pack's system stack. Light and dark follow the system until you toggle them, and the choice is kept as `pg-theme`. A quiet period is a grey "no data" slice, not downtime. Add monitor can test the check before you save it. The public status page stays at `/status`. Nothing runs a nightly backup, a retention purge, or a timed digest.
+Light:
 
 ![Dashboard](docs/screenshots/dashboard.png)
-
-![Dashboard, dark](docs/screenshots/dashboard-dark.png)
-
 ![Monitor detail](docs/screenshots/monitor-detail.png)
-
-![Monitor detail, dark](docs/screenshots/monitor-detail-dark.png)
-
 ![Add a monitor, kind](docs/screenshots/add-monitor.png)
-
 ![Add a monitor, details](docs/screenshots/add-monitor-details.png)
-
 ![Add a monitor, review](docs/screenshots/add-monitor-review.png)
-
 ![Incidents](docs/screenshots/incidents.png)
-
 ![Alerts](docs/screenshots/alerts.png)
-
 ![Certificates](docs/screenshots/certificates.png)
-
 ![SLA calculator](docs/screenshots/sla.png)
-
 ![Public status](docs/screenshots/status.png)
-
-![Public status, dark](docs/screenshots/status-dark.png)
-
 ![Sign in](docs/screenshots/login.png)
 
-![Sign in, dark](docs/screenshots/login-dark.png)
+Dark:
 
+![Dashboard, dark](docs/screenshots/dashboard-dark.png)
+![Monitor detail, dark](docs/screenshots/monitor-detail-dark.png)
 ![Add a monitor, kind, dark](docs/screenshots/add-monitor-dark.png)
-
 ![Incidents, dark](docs/screenshots/incidents-dark.png)
-
 ![Alerts, dark](docs/screenshots/alerts-dark.png)
-
 ![Certificates, dark](docs/screenshots/certificates-dark.png)
-
 ![SLA calculator, dark](docs/screenshots/sla-dark.png)
+![Public status, dark](docs/screenshots/status-dark.png)
+![Sign in, dark](docs/screenshots/login-dark.png)
 
 Live dashboard frames: [1](docs/screenshots/dashboard-live-1.png), [2](docs/screenshots/dashboard-live-2.png), [3](docs/screenshots/dashboard-live-3.png).
 
@@ -85,7 +73,11 @@ pulseguard push --host 127.0.0.1 --port 8791 --name <agent-name> --kind http --m
 
 The token is read from `PULSEGUARD_AGENT_TOKEN`. Reveal shows it, and Copy copies the command. Each agent reads Never seen, Seen N s ago, or Stale when the last push is older than three times its expected interval, plus the last result it sent. **Send a test result** pushes one sample through the collector. A wrong token, a message that is too long, or a public address is listed under Rejected. Saving the collector says "Saved. Restart PulseGuard to start listening."
 
-An accepted push creates a monitor named the same as `--name`, kind `agent`, with no target and no schedule. It shows on the Dashboard, the sidebar, the Monitors page, and its own detail page. The result is stored like any other check: up, or down with `--fail`. History, the 24 h bar, uptime, SLA, and the live check log include it. Three failures open an incident and send the email alert. One success resolves it. Depends on still applies. While an agent stays silent, PulseGuard records "no report from agent" once per expected interval (60 seconds unless the agent row says otherwise). Three of those failures open an incident and send the email. The next successful push resolves it. Nothing is recorded while PulseGuard is stopped, and a restart does not add a second row for an interval that already has one. **Open monitor** links to that page once the monitor exists. **Delete** is on every row, including a last-push name from before Add agent, and asks whether to keep the monitor and its history or delete both. Startup copies those older names into the agent list. The monitor is created on the next push.
+An accepted push creates a monitor named the same as `--name`, kind `agent`, with no target and no schedule. It shows on the Dashboard, the sidebar, the Monitors page, and its own detail page. The result is stored like any other check: up, or down with `--fail`. History, the 24 h bar, uptime, SLA, and the live check log include it. Three failures open an incident and send the email alert. One success resolves it. Depends on still applies.
+
+While an agent stays silent, PulseGuard records "no report from agent" once per expected interval (60 seconds unless the agent row says otherwise). Three of those failures open an incident and send the email. The next successful push resolves it. Nothing is recorded while PulseGuard is stopped, and a restart does not add a second row for an interval that already has one.
+
+**Open monitor** links to that page once the monitor exists. **Delete** is on every row, including a last-push name from before Add agent, and asks whether to keep the monitor and its history or delete both. Startup copies those older names into the agent list. The monitor is created on the next push.
 
 ## What works now
 
@@ -98,11 +90,11 @@ An accepted push creates a monitor named the same as `--name`, kind `agent`, wit
 - `pulseguard check --db history.db` stores that run in SQLite. Without `--db`, the command only prints JSON.
 - `pulseguard run --config monitors.json --db history.db --duration 30` schedules those checks and shuts the threads down when the duration ends. Omit `--duration` to run until interrupted. A full job queue defers work instead of growing. The SQLite file is opened on the writer thread.
 - An incident opens after 3 consecutive failures and resolves after 1 consecutive success. It cannot close before it opens. `depends_on` suppresses a failing monitor when a dependency is already down. Opening and resolving each write one INFO log that names the monitor. A failure while the incident is already open does not log or mail again.
-- When `PULSEGUARD_SMTP_HOST` is set, `pulseguard run` sends one email for the open and one for the resolve. An empty host sends nothing. `EmailNotifier.send_digest()` sends the queued lines as one message; `run` does not call it on a timer.
+- When `PULSEGUARD_SMTP_HOST` is set, `pulseguard run` sends one email for the open and one for the resolve. An empty host sends nothing. `EmailNotifier.send_digest()` sends the queued lines as one message. `run` does not call it on a timer.
 - `pulseguard run --evidence-dir DIR` writes a CSV, JSON, and text timeline when an incident opens. The deadline is 6 hours after the open. Rows older than 180 days are left out. The pack says it is not legal advice.
 - `pulseguard export` writes stored results or the monitor catalog as CSV or JSON. `import-monitors` loads a catalog CSV. `pulseguard run` and `pulseguard web` still read the JSON file. `pulseguard serve` schedules the catalog table and reloads it about once a second, so an add, edit, pause, or delete applies without a restart.
 - `pulseguard backup` writes a SQLite snapshot with a SHA-256 header, and can verify or restore it. That header is `PGDB`. Agent frames use a different header, `PGAG`.
-- `pulseguard run --agent-listen 127.0.0.1:9700` starts a collector on a loopback or private IPv4 address. It needs `PULSEGUARD_AGENT_TOKEN`. Each connection sends one result. A bad frame closes that connection, and the collector keeps listening. Accepted results go through the same writer as local checks. `pulseguard push` sends one result and does not probe a URL. Close the client with a context manager; `__del__` only covers a socket that was left open.
+- `pulseguard run --agent-listen 127.0.0.1:9700` starts a collector on a loopback or private IPv4 address. It needs `PULSEGUARD_AGENT_TOKEN`. Each connection sends one result. A bad frame closes that connection, and the collector keeps listening. Accepted results go through the same writer as local checks. `pulseguard push` sends one result and does not probe a URL. Close the client with a context manager. `__del__` only covers a socket that was left open.
 - `pulseguard web --config monitors.json --db history.db` serves the status page on `127.0.0.1:8080` and runs the checks in the same process. The public page and `GET /api/status` read stored rows. They do not contact monitor targets, and they do not show catalog targets. `POST /api/monitors` requires `X-API-Key`. Admin pages use a session login and a CSRF token. The password is hashed with PBKDF2-HMAC-SHA256 for 100000 iterations.
 - `pulseguard serve` creates `./data`, the SQLite file, and a secret file (mode 0600) on first run. It opens the browser unless `--no-browser` is set, and it refuses `0.0.0.0`. The signed-in pages cover monitors, incidents, certificates, alerts, SLA, agents, export, and backup. Run check now is an explicit POST. No other page fetches a monitor URL.
 - `pulseguard console --db history.db` opens the desktop window. A loader thread queues snapshots. `after()` applies them, and widget calls raise if they are not on the main thread. The SLA form uses the same error-budget helper as the stored rollups.
@@ -113,11 +105,50 @@ An accepted push creates a monitor named the same as `--name`, kind `agent`, wit
 
 ## What it does not do
 
-It does not send the digest or purge old rows on a schedule. It does not scan hosts you did not configure. `run` and `web` on the sample file probe that file's local placeholders. The collector and the web server do not listen on a public address or on `0.0.0.0`. The public status page does not fetch a user-supplied URL. Tests that open a connection use `127.0.0.1`, `localhost` from the hosts file, a certificate generated in a temporary directory, a local SMTP listener, or a local agent collector. The MySQL tests use a scripted connection unless `PULSEGUARD_MYSQL_HOST` is set. The desktop test skips the Tk window when there is no display.
+It does not send the digest or purge old rows on a schedule. It does not scan hosts you did not configure. `run` and `web` on the sample file probe that file's local placeholders. The collector and the web server do not listen on a public address or on `0.0.0.0`. The public status page reads stored rows and does not fetch a user-supplied URL.
 
-Redirects are not followed. Hostnames are not resolved during validation, so turning private targets off does not stop a public name from pointing at a private address later. That gap remains. The public status page does not fetch a user-supplied URL.
+Redirects are not followed. Hostnames are not resolved during validation, so turning private targets off does not stop a public name from pointing at a private address later.
 
-Operator input is bounded. Intervals are 30–86400 seconds, timeouts at most 120 seconds, retries 1–5, backoff 0–30 seconds, names 1–128 characters, and URLs at most 2048 characters. Keyword text is 1–200 characters, a body read is at most 1048576 bytes, `alert_after` is 1–20, a defacement hash is 64 hex characters, DNS expects 1–8 addresses, TCP and TLS ports are 1–65535, heartbeat tokens are 16–128 characters, and heartbeat grace is 30–604800 seconds. Stored messages are at most 2000 characters, a catalog target is at most 2048 characters, history pages are 1–1000 rows, and retention is 1–3650 days (the helper defaults to 180). The engine allows 1–32 workers, a job queue of 1–1000, and a per-host cap of 1–32. `failures_before_open` and `successes_before_resolve` are 1–20. A monitor may list up to 8 dependencies, and groups may nest 8 levels. An evidence pack keeps at most 1000 events, and its countdown is 6 hours. A digest keeps at most 100 lines. SMTP settings allow a host of 1–255 characters, a port of 1–65535, and 1–8 recipients. An agent frame payload is at most 8192 bytes, a collector handles at most 8 connections at once, and a frame read waits at most 5 seconds. The agent token is 16–128 characters. The web session key is 16–128 characters, the admin password is 8–128, the API key is 16–128, and a web request body is at most 16384 bytes. The status window polls every 200 milliseconds and the loader waits 1 second. The SLA form accepts 1–100000 samples. The web server uses 4 worker threads. The anomaly scorer accepts 3–100000 samples and repeats a timing run at most 100000 times. Those caps are validation limits, not performance figures.
+Tests that open a connection use `127.0.0.1`, `localhost` from the hosts file, a certificate generated in a temporary directory, a local SMTP listener, or a local agent collector. The MySQL tests use a scripted connection unless `PULSEGUARD_MYSQL_HOST` is set. The desktop test skips the Tk window when there is no display.
+
+## Limits
+
+These caps reject bad operator input. They are not performance figures.
+
+| Input | Allowed range |
+| --- | --- |
+| Interval | 30–86400 seconds |
+| Timeout | at most 120 seconds |
+| Retries / backoff | 1–5 retries, 0–30 seconds |
+| Name | 1–128 characters |
+| URL or catalog target | at most 2048 characters |
+| Keyword | 1–200 characters |
+| Body read | at most 1048576 bytes |
+| `alert_after` | 1–20 |
+| Defacement hash | 64 hex characters |
+| DNS expected addresses | 1–8 |
+| TCP and TLS port | 1–65535 |
+| Heartbeat token | 16–128 characters |
+| Heartbeat grace | 30–604800 seconds |
+| Stored message | at most 2000 characters |
+| History page | 1–1000 rows |
+| Retention helper | 1–3650 days (default 180) |
+| Workers / per-host cap | 1–32 |
+| Job queue | 1–1000 |
+| Failures before open / successes before resolve | 1–20 |
+| Dependencies | at most 8, nested 8 levels |
+| Evidence pack | at most 1000 events, 6 hour countdown |
+| Digest | at most 100 lines |
+| SMTP host / port / recipients | 1–255 characters, port 1–65535, 1–8 recipients |
+| Agent frame | at most 8192 bytes, 8 connections, 5 second read |
+| Agent token | 16–128 characters |
+| Session key / API key | 16–128 characters |
+| Admin password | 8–128 characters |
+| Web request body | at most 16384 bytes |
+| Status poll / loader wait | 200 milliseconds / 1 second |
+| SLA form samples | 1–100000 |
+| Web server threads | 4 |
+| Anomaly samples / timing repeats | 3–100000 samples, at most 100000 repeats |
 
 ## Run a check
 
@@ -194,7 +225,16 @@ flowchart LR
   writer --> console[Desktop console]
 ```
 
-`docs/architecture.md`, `docs/concurrency-design.md`, `docs/security.md`, `docs/design-system.md`, and `docs/syllabus-coverage.md` expand that picture. `CHANGELOG.md` holds the v1.2.2 tag notes.
+Further reading:
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/concurrency-design.md](docs/concurrency-design.md)
+- [docs/security.md](docs/security.md)
+- [docs/design-system.md](docs/design-system.md)
+- [docs/syllabus-coverage.md](docs/syllabus-coverage.md)
+- [CHANGELOG.md](CHANGELOG.md)
+
+The console uses the design pack's system type stack. Light and dark follow the system until you toggle them. The choice is kept as `pg-theme`. A quiet period is a grey "no data" slice, not downtime. Add monitor can test the check before you save it. The public status page stays at `/status`.
 
 ## Container
 
@@ -222,7 +262,6 @@ Run the script again for a new measurement. Those seconds belong to that run.
 
 ## Security and what is still ahead
 
-Admin writes need a session and a CSRF token, or `X-API-Key` for `POST /api/monitors`. The public page reads stored rows. Details are in `docs/security.md`.
+Admin writes need a session and a CSRF token, or `X-API-Key` for `POST /api/monitors`. The public page reads stored rows. Details are in [docs/security.md](docs/security.md).
 
 Still ahead: a nightly verified backup, a retention purge, a timed digest, an importlib plugin loader, `/health`, and `/metrics`. Hostnames are still not resolved during validation.
-
