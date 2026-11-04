@@ -7,6 +7,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from bs4 import BeautifulSoup
 
 from pulseguard.checks.models import CheckResult, Severity
@@ -36,7 +37,9 @@ _PAGES = (
 )
 
 
-def test_one_snapshot_fills_the_hero_tiles_chip_and_badge(tmp_path: Path) -> None:
+def test_one_snapshot_fills_the_hero_tiles_chip_and_badge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The same fixture prints one count in every dashboard widget."""
     database = tmp_path / "history.db"
     client = _client(database)
@@ -63,6 +66,7 @@ def test_one_snapshot_fills_the_hero_tiles_chip_and_badge(tmp_path: Path) -> Non
     assert snap["log"][0]["mark"] in {"PASS", "FAIL", "GAP"}
     assert "placeholder" not in str(snap["log"])
 
+    monkeypatch.setattr("pulseguard.web.pages.utc_now", lambda: _NOW)
     page = client.get("/dashboard").get_data(as_text=True)
     body = client.get("/api/dashboard").get_json()
     soup = BeautifulSoup(page, "html.parser")
@@ -78,7 +82,9 @@ def test_one_snapshot_fills_the_hero_tiles_chip_and_badge(tmp_path: Path) -> Non
     assert "Open for" in soup.select_one("[data-snap=aside]").get_text()
 
 
-def test_a_resolved_incident_does_not_count_as_open(tmp_path: Path) -> None:
+def test_a_resolved_incident_does_not_count_as_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Zero open incidents and a resolved incident today stay in agreement."""
     database = tmp_path / "history.db"
     client = _client(database)
@@ -87,6 +93,7 @@ def test_a_resolved_incident_does_not_count_as_open(tmp_path: Path) -> None:
         repo.add_result(_result("shop", True, "HTTP 200", _NOW, 80))
         repo.open_incident("shop", _NOW - timedelta(hours=3), "connection refused", "http")
         repo.resolve_incident("shop", _NOW - timedelta(hours=1))
+    monkeypatch.setattr("pulseguard.web.pages.utc_now", lambda: _NOW)
     page = client.get("/dashboard").get_data(as_text=True)
     soup = BeautifulSoup(page, "html.parser")
     assert _values(soup, "open") == {"0"}
